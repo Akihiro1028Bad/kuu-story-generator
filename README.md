@@ -1,0 +1,2 @@
+# kuu-story-generator
+クゥーストーリージェネレーター
