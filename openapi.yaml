@@ -1,0 +1,71 @@
+openapi: 3.0.2
+info:
+  title: Nano Banana Pro API Mock
+  version: 1.0.0
+  description: |
+    モックサーバー用のOpenAPI仕様書
+    Prismモックサーバーがこの仕様書を読み込んでモックレスポンスを生成します。
+servers:
+  - url: http://prism:4010
+    description: Prismモックサーバー（開発環境）
+paths:
+  /api/v1/generate:
+    post:
+      summary: 画像生成API
+      description: |
+        「くぅー」という文字列を画像生成AI「Nano Banana Pro」で生成するAPI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: "生成する文字列（例: \"くぅー\"）"
+                  example: "くぅー"
+                style:
+                  type: string
+                  description: スタイル（オプション）
+                  example: "pop"
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imageUrl:
+                    type: string
+                    format: uri
+                    description: 生成された画像のURL
+                    example: "https://example.com/generated/image.png"
+                  status:
+                    type: string
+                    description: ステータス
+                    example: "success"
+        '400':
+          description: リクエストエラー
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid request"
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Internal server error"
+
