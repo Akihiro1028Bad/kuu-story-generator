@@ -5,15 +5,18 @@ info:
   description: |
     モックサーバー用のOpenAPI仕様書
     Prismモックサーバーがこの仕様書を読み込んでモックレスポンスを生成します。
+    Nano Banana Proの正式なAPI仕様に基づいています。
 servers:
   - url: http://prism:4010
     description: Prismモックサーバー（開発環境）
 paths:
-  /api/v1/generate:
+  /fal-ai/nano-banana-pro/edit:
     post:
-      summary: 画像生成API
+      summary: 画像編集API
       description: |
-        「くぅー」という文字列を画像生成AI「Nano Banana Pro」で生成するAPI
+        既存の画像をテキストプロンプトに基づいて編集するAPI
+        Nano Banana Proモデルを使用して画像を編集します。
+        GoogleのGemini 3 Pro Imageアーキテクチャを使用した高度なセマンティック編集をサポートします。
       requestBody:
         required: true
         content:
@@ -22,15 +25,77 @@ paths:
               type: object
               required:
                 - prompt
+                - image_urls
               properties:
                 prompt:
                   type: string
-                  description: "生成する文字列（例: \"くぅー\"）"
-                  example: "くぅー"
-                style:
+                  description: 画像編集のためのテキストプロンプト（自然言語での編集指示）
+                  example: "くぅーという文字を追加してください"
+                image_urls:
+                  type: array
+                  description: |
+                    編集する画像の配列（最大14枚まで組み合わせ可能）
+                    以下のいずれかの形式で指定できます：
+                    - 公開アクセス可能なURL（例: "https://example.com/image1.png"）
+                    - Base64エンコードされたData URI（例: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA..."）
+                    大きなファイルをData URIで送信する場合は、リクエストのパフォーマンスに影響する可能性があります。
+                  minItems: 1
+                  maxItems: 14
+                  items:
+                    type: string
+                    format: uri
+                  example:
+                    - "https://example.com/image1.png"
+                    - "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA..."
+                num_images:
+                  type: integer
+                  description: 生成する画像数
+                  minimum: 1
+                  maximum: 4
+                  default: 1
+                  example: 1
+                aspect_ratio:
                   type: string
-                  description: スタイル（オプション）
-                  example: "pop"
+                  enum:
+                    - "auto"
+                    - "21:9"
+                    - "16:9"
+                    - "3:2"
+                    - "4:3"
+                    - "5:4"
+                    - "1:1"
+                    - "4:5"
+                    - "3:4"
+                    - "2:3"
+                    - "9:16"
+                  description: 出力画像のアスペクト比
+                  default: "auto"
+                  example: "auto"
+                output_format:
+                  type: string
+                  enum:
+                    - "jpeg"
+                    - "png"
+                    - "webp"
+                  description: 出力画像の形式
+                  default: "png"
+                  example: "png"
+                sync_mode:
+                  type: boolean
+                  description: |
+                    Trueの場合、メディアはdata URIとして返され、
+                    出力データはリクエスト履歴で利用できなくなります
+                  default: false
+                  example: false
+                resolution:
+                  type: string
+                  enum:
+                    - "1K"
+                    - "2K"
+                    - "4K"
+                  description: 出力画像の解像度（4Kは2倍のコストがかかります）
+                  default: "1K"
+                  example: "1K"
       responses:
         '200':
           description: 成功
@@ -38,16 +103,23 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - images
+                  - description
                 properties:
-                  imageUrl:
+                  images:
+                    type: array
+                    description: 編集された画像の配列
+                    items:
+                      $ref: '#/components/schemas/ImageFile'
+                    example:
+                      - file_name: "nano-banana-multi-edit-output.png"
+                        content_type: "image/png"
+                        url: "https://storage.googleapis.com/falserverless/example_outputs/nano-banana-multi-edit-output.png"
+                  description:
                     type: string
-                    format: uri
-                    description: 生成された画像のURL
-                    example: "https://example.com/generated/image.png"
-                  status:
-                    type: string
-                    description: ステータス
-                    example: "success"
+                    description: 編集された画像の説明
+                    example: ""
         '400':
           description: リクエストエラー
           content:
@@ -58,6 +130,16 @@ paths:
                   error:
                     type: string
                     example: "Invalid request"
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
         '500':
           description: サーバーエラー
           content:
@@ -68,4 +150,39 @@ paths:
                   error:
                     type: string
                     example: "Internal server error"
+components:
+  schemas:
+    ImageFile:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: ファイルをダウンロードできるURL
+          example: "https://storage.googleapis.com/falserverless/example_outputs/nano-banana-multi-edit-output.png"
+        content_type:
+          type: string
+          description: ファイルのMIMEタイプ
+          example: "image/png"
+        file_name:
+          type: string
+          description: ファイル名（提供されない場合は自動生成されます）
+          example: "nano-banana-multi-edit-output.png"
+        file_size:
+          type: integer
+          description: ファイルサイズ（バイト単位）
+          example: 1024000
+        file_data:
+          type: string
+          description: ファイルデータ
+        width:
+          type: integer
+          description: 画像の幅
+          example: 1024
+        height:
+          type: integer
+          description: 画像の高さ
+          example: 1024
 
