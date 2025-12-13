@@ -12,9 +12,21 @@ function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object') return value as Record<string, unknown>
+  return undefined
+}
+
 function getHttpStatus(error: unknown): number | undefined {
-  const e = error as any
-  return e?.status ?? e?.response?.status
+  const e = asRecord(error)
+  const status = e?.status
+  if (typeof status === 'number') return status
+
+  const response = asRecord(e?.response)
+  const responseStatus = response?.status
+  if (typeof responseStatus === 'number') return responseStatus
+
+  return undefined
 }
 
 function isRetryableGeminiError(error: unknown): boolean {
@@ -50,16 +62,34 @@ async function generateContentWithRetry<T>(
 }
 
 function toDebugJson(error: unknown) {
-  const e = error as any
+  const e = asRecord(error)
+  const response = asRecord(e?.response)
   return {
-    name: e?.name,
-    message: e?.message,
-    stack: e?.stack,
-    status: e?.status ?? e?.response?.status,
-    code: e?.code,
+    name: typeof e?.name === 'string' ? e.name : undefined,
+    message: typeof e?.message === 'string' ? e.message : undefined,
+    stack: typeof e?.stack === 'string' ? e.stack : undefined,
+    status: getHttpStatus(error),
+    code: typeof e?.code === 'string' ? e.code : undefined,
     // SDKが内部に抱えているレスポンス/詳細（あれば）
-    details: e?.details ?? e?.response ?? e?.error,
+    details: e?.details ?? response ?? e?.error,
   }
+}
+
+type GeminiInlineData = {
+  mimeType?: string
+  data?: string
+}
+
+type GeminiPart = {
+  inlineData?: GeminiInlineData
+}
+
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiPart[]
+    }
+  }>
 }
 
 export async function POST(request: NextRequest) {
@@ -160,31 +190,36 @@ export async function POST(request: NextRequest) {
     const model ='gemini-3-pro-image-preview'
 
     const res = await generateContentWithRetry(
-      () =>
-        ai.models.generateContent({
-          model,
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: prompt },
-                {
-                  inlineData: {
-                    mimeType: image.type || 'image/png',
-                    data: imageBase64,
+      () => {
+        const req =
+          ({
+            model,
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: image.type || 'image/png',
+                      data: imageBase64,
+                    },
                   },
-                },
-              ],
-            },
-          ],
-          // 画像だけ返したい（念のためテキストも返る可能性がある）
-          config: { responseModalities: ['IMAGE'] },
-        } as any),
+                ],
+              },
+            ],
+            // 画像だけ返したい（念のためテキストも返る可能性がある）
+            config: { responseModalities: ['IMAGE'] as const },
+          } as unknown) as Parameters<typeof ai.models.generateContent>[0]
+
+        return ai.models.generateContent(req)
+      },
       { maxAttempts: 3, baseDelayMs: 250 }
     )
 
-    const parts = (res as any)?.candidates?.[0]?.content?.parts ?? []
-    const firstInline = parts.find((p: any) => p?.inlineData?.data)
+    const parsed = res as unknown as GeminiGenerateContentResponse
+    const parts = parsed.candidates?.[0]?.content?.parts ?? []
+    const firstInline = parts.find(p => typeof p.inlineData?.data === 'string')
     const outBase64 = firstInline?.inlineData?.data as string | undefined
     const outMime =
       (firstInline?.inlineData?.mimeType as string | undefined) ||

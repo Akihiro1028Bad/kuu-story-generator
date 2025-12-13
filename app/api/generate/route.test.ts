@@ -12,7 +12,7 @@ vi.mock('@google/genai', () => ({
     models = {
       generateContent: generateContentMock,
     }
-    constructor(_args: any) {}
+    constructor() {}
   },
 }))
 

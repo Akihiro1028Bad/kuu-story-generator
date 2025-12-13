@@ -4,7 +4,6 @@ import { useActionState, useState, useEffect } from 'react'
 import { generateKuu, type GenerateState } from './actions'
 import { UploadSection } from './UploadSection'
 import { StyleSection } from './StyleSection'
-import { GenerateButton } from './GenerateButton'
 import { SaveActions } from './SaveActions'
 import { TextPhraseOption } from '@/app/lib/presets/textPhraseOptions'
 import { StylePreset } from '@/app/lib/presets/stylePresets'
@@ -26,7 +25,7 @@ export function KuuGenerator() {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [options, setOptions] = useState<OptionsData | null>(null)
-  const [outputFormat, setOutputFormat] = useState<'jpeg' | 'png'>('jpeg')
+  const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
   const [selectedText, setSelectedText] = useState<string>('')
   const [selectedStyles, setSelectedStyles] = useState<string[]>([])
   const [selectedPosition, setSelectedPosition] = useState<string>('')
@@ -163,9 +162,9 @@ export function KuuGenerator() {
     // 生成を実行（ステップ3への移動はuseEffectで自動的に行われる）
     try {
       await formAction(formData)
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Generate action threw:', e)
-      setGenerateErrorMessage(e?.message ? String(e.message) : String(e))
+      setGenerateErrorMessage(e instanceof Error ? e.message : String(e))
       setShowGenerateErrorModal(true)
     }
   }

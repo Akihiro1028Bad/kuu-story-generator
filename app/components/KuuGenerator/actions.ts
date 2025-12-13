@@ -7,10 +7,19 @@ export type GenerateState =
   | { status: 'error'; message: string }
   | { status: 'success'; imageDataUrl: string; mimeType: string; width: number; height: number }
 
-const initialState: GenerateState = { status: 'idle' }
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+type GenerateApiErrorBody = {
+  error?: string
+  debug?: unknown
+}
+
+function isGenerateApiErrorBody(value: unknown): value is GenerateApiErrorBody {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return v.error === undefined || typeof v.error === 'string'
 }
 
 export async function generateKuu(
@@ -92,25 +101,29 @@ export async function generateKuu(
     const response = await fetch(url, { method: 'POST', body: formDataForAPI })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: '画像生成に失敗しました' }))
+      const errorUnknown = await response.json().catch(() => ({ error: '画像生成に失敗しました' }))
+      const errorBody: GenerateApiErrorBody = isGenerateApiErrorBody(errorUnknown) ? errorUnknown : {}
       // dev環境では詳細をログに出す（UIにも出せるように message にも付与）
       console.error('Generate API error response:', {
         status: response.status,
         statusText: response.statusText,
-        error,
+        error: errorBody,
       })
 
       const isProd = process.env.NODE_ENV === 'production'
       const debugSuffix =
-        !isProd && (error as any)?.debug
-          ? `\n\n--- debug ---\n${JSON.stringify((error as any).debug, null, 2)}`
+        !isProd && errorBody.debug !== undefined
+          ? `\n\n--- debug ---\n${JSON.stringify(errorBody.debug, null, 2)}`
           : ''
+
+      const errorMessage =
+        typeof errorBody.error === 'string' && errorBody.error
+          ? errorBody.error
+          : '画像生成に失敗しました。しばらくしてから再試行してください。'
 
       return {
         status: 'error',
-        message: (error as any).error
-          ? `${(error as any).error}${debugSuffix}`
-          : `画像生成に失敗しました。しばらくしてから再試行してください。${debugSuffix}`,
+        message: `${errorMessage}${debugSuffix}`,
       }
     }
 

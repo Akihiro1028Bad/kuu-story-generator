@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { detectDeviceClass } from '@/app/lib/save/detectDeviceClass'
 import { saveOnDesktop } from '@/app/lib/save/saveOnDesktop'
 import { saveOnMobile } from '@/app/lib/save/saveOnMobile'
@@ -13,12 +13,8 @@ interface SaveActionsProps {
 }
 
 export function SaveActions({ imageDataUrl, mimeType }: SaveActionsProps) {
-  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [device] = useState<'desktop' | 'mobile'>(() => detectDeviceClass())
   const [saveStatus, setSaveStatus] = useState<string | null>(null)
-
-  useEffect(() => {
-    setDevice(detectDeviceClass())
-  }, [])
 
   const handleSave = async () => {
     setSaveStatus('保存中...')

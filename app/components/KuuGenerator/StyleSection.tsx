@@ -36,6 +36,9 @@ export function StyleSection({
   const [searchQuery, setSearchQuery] = useState('')
   const styleTagRefs = useRef<{ [key: string]: HTMLLabelElement | null }>({})
   const textPhraseTagRefs = useRef<{ [key: string]: HTMLLabelElement | null }>({})
+
+  const textPhrases = options?.textPhrases
+  const styles = options?.styles
   
   // コントロールされている場合は親の値を使用、そうでなければ内部状態を使用
   const selectedText = controlledSelectedText !== undefined ? controlledSelectedText : internalSelectedText
@@ -86,14 +89,14 @@ export function StyleSection({
 
   // ランダムに並び替えた配列（コンポーネントマウント時に一度だけ実行）
   const shuffledTextPhrases = useMemo(() => {
-    if (!options?.textPhrases) return []
-    return [...options.textPhrases].sort(() => Math.random() - 0.5)
-  }, [options?.textPhrases])
+    if (!textPhrases) return []
+    return [...textPhrases].sort((a, b) => a.label.localeCompare(b.label, 'ja'))
+  }, [textPhrases])
 
   const shuffledStyles = useMemo(() => {
-    if (!options?.styles) return []
-    return [...options.styles].sort(() => Math.random() - 0.5)
-  }, [options?.styles])
+    if (!styles) return []
+    return [...styles].sort((a, b) => a.label.localeCompare(b.label, 'ja'))
+  }, [styles])
 
   const filteredStyles = (styles: StylePreset[]) => {
     if (!searchQuery) return styles

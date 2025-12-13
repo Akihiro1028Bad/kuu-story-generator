@@ -48,17 +48,17 @@ describe('buildPrompt', () => {
 
   it('UT-003: 正常系 - スタイルが多い場合はヒントを圧縮する（最大10件+ほか）', () => {
     const styles: StylePreset[] = [
-      { id: 's1', label: 's1', description: 'd', promptHint: 'ヒント1', category: 'other' as any },
-      { id: 's2', label: 's2', description: 'd', promptHint: 'ヒント2', category: 'other' as any },
-      { id: 's3', label: 's3', description: 'd', promptHint: 'ヒント3', category: 'other' as any },
-      { id: 's4', label: 's4', description: 'd', promptHint: 'ヒント4', category: 'other' as any },
-      { id: 's5', label: 's5', description: 'd', promptHint: 'ヒント5', category: 'other' as any },
-      { id: 's6', label: 's6', description: 'd', promptHint: 'ヒント6', category: 'other' as any },
-      { id: 's7', label: 's7', description: 'd', promptHint: 'ヒント7', category: 'other' as any },
-      { id: 's8', label: 's8', description: 'd', promptHint: 'ヒント8', category: 'other' as any },
-      { id: 's9', label: 's9', description: 'd', promptHint: 'ヒント9', category: 'other' as any },
-      { id: 's10', label: 's10', description: 'd', promptHint: 'ヒント10', category: 'other' as any },
-      { id: 's11', label: 's11', description: 'd', promptHint: 'ヒント11', category: 'other' as any },
+      { id: 's1', label: 's1', description: 'd', promptHint: 'ヒント1', category: 'other' },
+      { id: 's2', label: 's2', description: 'd', promptHint: 'ヒント2', category: 'other' },
+      { id: 's3', label: 's3', description: 'd', promptHint: 'ヒント3', category: 'other' },
+      { id: 's4', label: 's4', description: 'd', promptHint: 'ヒント4', category: 'other' },
+      { id: 's5', label: 's5', description: 'd', promptHint: 'ヒント5', category: 'other' },
+      { id: 's6', label: 's6', description: 'd', promptHint: 'ヒント6', category: 'other' },
+      { id: 's7', label: 's7', description: 'd', promptHint: 'ヒント7', category: 'other' },
+      { id: 's8', label: 's8', description: 'd', promptHint: 'ヒント8', category: 'other' },
+      { id: 's9', label: 's9', description: 'd', promptHint: 'ヒント9', category: 'other' },
+      { id: 's10', label: 's10', description: 'd', promptHint: 'ヒント10', category: 'other' },
+      { id: 's11', label: 's11', description: 'd', promptHint: 'ヒント11', category: 'other' },
     ]
     const prompt = buildPrompt(mockTextPhrase, styles, mockPosition)
     expect(prompt).toContain(
