@@ -50,9 +50,10 @@ describe('API Integration: /api/generate', () => {
     // FormData作成
     const formData = new FormData()
     formData.append('image', new File(['test'], 'test.png', { type: 'image/png' }))
-    formData.append('textPhraseId', 'kuu')
-    formData.append('styleIds', 'gentle')
-    formData.append('positionId', 'top-left')
+    // 現行プリセットIDは数値文字列
+    formData.append('textPhraseId', '1')
+    formData.append('styleIds', '1')
+    formData.append('positionId', '1')
     formData.append('outputFormat', 'png')
     formData.append('originalWidth', '100')
     formData.append('originalHeight', '100')
@@ -111,9 +112,10 @@ describe('API Integration: /api/generate', () => {
 
     const formData = new FormData()
     formData.append('image', new File(['test'], 'test.png', { type: 'image/png' }))
-    formData.append('textPhraseId', 'kuu')
-    formData.append('styleIds', 'gentle')
-    formData.append('positionId', 'top-left')
+    // 現行プリセットIDは数値文字列
+    formData.append('textPhraseId', '1')
+    formData.append('styleIds', '1')
+    formData.append('positionId', '1')
     formData.append('outputFormat', 'png')
     formData.append('originalWidth', '100')
     formData.append('originalHeight', '100')

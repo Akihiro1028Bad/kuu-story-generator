@@ -14,25 +14,12 @@ interface SaveActionsProps {
 
 export function SaveActions({ imageDataUrl, mimeType }: SaveActionsProps) {
   const [device] = useState<'desktop' | 'mobile'>(() => detectDeviceClass())
-  const [saveStatus, setSaveStatus] = useState<string | null>(null)
 
   const handleSave = async () => {
-    setSaveStatus('保存中...')
-    
     if (device === 'desktop') {
       saveOnDesktop(imageDataUrl, mimeType as 'image/png' | 'image/jpeg')
-      setSaveStatus('ダウンロードしました！')
-      setTimeout(() => setSaveStatus(null), 3000)
     } else {
-      const result = await saveOnMobile(imageDataUrl)
-      if (result.outcome === 'camera-roll-saved') {
-        setSaveStatus('共有/保存メニューを開きました')
-      } else if (result.outcome === 'fallback-downloaded') {
-        setSaveStatus(result.message)
-      } else {
-        setSaveStatus(`エラー: ${result.message}`)
-      }
-      setTimeout(() => setSaveStatus(null), 5000)
+      await saveOnMobile(imageDataUrl)
     }
   }
 
@@ -62,15 +49,6 @@ export function SaveActions({ imageDataUrl, mimeType }: SaveActionsProps) {
             {label}
           </span>
         </button>
-        
-        {saveStatus && (
-          <div className="alert alert-success shadow-lg border-2 border-success/30 py-4 text-sm rounded-xl animate-[fadeIn_0.3s_ease-in-out_forwards]" role="status" aria-live="polite">
-            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="font-semibold">{saveStatus}</span>
-          </div>
-        )}
         
         <p className="text-xs sm:text-sm text-base-content/60 mt-3 leading-relaxed">
           ※ 画像はサーバーに保存されません。必ず保存してください。
