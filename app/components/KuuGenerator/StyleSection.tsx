@@ -3,7 +3,32 @@
 import { TextPhraseOption } from '@/app/lib/presets/textPhraseOptions'
 import { StylePreset } from '@/app/lib/presets/stylePresets'
 import { PositionPreset } from '@/app/lib/presets/positionPresets'
-import { useState, useRef, useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
+
+function randomIntInclusive(maxInclusive: number) {
+  // 0..maxInclusive を返す
+  if (maxInclusive <= 0) return 0
+
+  // ブラウザの暗号学的乱数が使える場合はそれを優先
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const buf = new Uint32Array(1)
+    crypto.getRandomValues(buf)
+    const r = buf[0] / 0x1_0000_0000 // 2^32
+    return Math.floor(r * (maxInclusive + 1))
+  }
+
+  return Math.floor(Math.random() * (maxInclusive + 1))
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+  // Fisher–Yates shuffle
+  const arr = [...items]
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = randomIntInclusive(i)
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
 
 interface StyleSectionProps {
   options: {
@@ -44,6 +69,17 @@ export function StyleSection({
   const selectedText = controlledSelectedText !== undefined ? controlledSelectedText : internalSelectedText
   const selectedStyles = controlledSelectedStyles !== undefined ? controlledSelectedStyles : internalSelectedStyles
   const selectedPosition = controlledSelectedPosition !== undefined ? controlledSelectedPosition : internalSelectedPosition
+  
+  // ランダムに並び替えた配列（ページリロードのたびに毎回ランダムにシャッフル）
+  const shuffledTextPhrases = useMemo<TextPhraseOption[]>(() => {
+    if (!textPhrases || textPhrases.length === 0) return []
+    return shuffleArray(textPhrases)
+  }, [textPhrases])
+
+  const shuffledStyles = useMemo<StylePreset[]>(() => {
+    if (!styles || styles.length === 0) return []
+    return shuffleArray(styles)
+  }, [styles])
   
   const handleTextChange = (value: string) => {
     if (onTextChange) {
@@ -86,17 +122,6 @@ export function StyleSection({
       setInternalSelectedPosition(value)
     }
   }
-
-  // ランダムに並び替えた配列（コンポーネントマウント時に一度だけ実行）
-  const shuffledTextPhrases = useMemo(() => {
-    if (!textPhrases) return []
-    return [...textPhrases].sort((a, b) => a.label.localeCompare(b.label, 'ja'))
-  }, [textPhrases])
-
-  const shuffledStyles = useMemo(() => {
-    if (!styles) return []
-    return [...styles].sort((a, b) => a.label.localeCompare(b.label, 'ja'))
-  }, [styles])
 
   const filteredStyles = (styles: StylePreset[]) => {
     if (!searchQuery) return styles
