@@ -1,0 +1,173 @@
+openapi: 3.0.2
+info:
+  title: kuu-story-generator (BFF) API
+  version: 0.1.0
+  description: |
+    本アプリ（kuu-story-generator）の内部BFF API契約。
+    - クライアントからは本APIを呼び出し、外部AI（Nano Banana Pro）への通信やAPIキー管理はサーバー側に閉じる。
+servers:
+  - url: http://localhost:3000
+    description: Next.js dev server
+
+paths:
+  /api/options:
+    get:
+      summary: 選択肢（文言/スタイル/位置）一覧を取得
+      description: 生成フォームで利用する候補一覧を返す。
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptionsResponse"
+
+  /api/generate:
+    post:
+      summary: 画像生成（くぅー合成）を実行
+      description: |
+        画像ファイルと選択値を受け取り、外部AIで合成した結果を返す。
+        - 画像はサーバーに永続保存しない（メモリ上で処理して返却）。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+                - textPhraseId
+                - styleId
+                - positionId
+                - outputFormat
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: アップロード画像
+                textPhraseId:
+                  type: string
+                  description: 入れる文言の候補ID
+                styleId:
+                  type: string
+                  description: 文字スタイルの候補ID
+                positionId:
+                  type: string
+                  description: 文字位置の候補ID
+                outputFormat:
+                  type: string
+                  enum: ["png", "jpeg"]
+                  description: |
+                    返却画像形式。
+                    - PC: png/jpeg を選択
+                    - Mobile: jpeg 固定（クライアントはjpegを指定）
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateResponse"
+        "400":
+          description: 入力不備
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: 生成失敗
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    OptionItem:
+      type: object
+      required:
+        - id
+        - label
+      properties:
+        id:
+          type: string
+          description: 候補ID
+        label:
+          type: string
+          description: UI表示名
+        description:
+          type: string
+          description: 説明（任意）
+    TextPhraseOption:
+      allOf:
+        - $ref: "#/components/schemas/OptionItem"
+        - type: object
+          properties:
+            text:
+              type: string
+              description: 実際に生成プロンプトに入る文言
+    StylePreset:
+      allOf:
+        - $ref: "#/components/schemas/OptionItem"
+        - type: object
+          properties:
+            promptHint:
+              type: string
+              description: 生成AIに渡す指示のテンプレ断片
+    PositionPreset:
+      allOf:
+        - $ref: "#/components/schemas/OptionItem"
+        - type: object
+          properties:
+            placementHint:
+              type: string
+              description: 生成AIに渡す指示のテンプレ断片
+    OptionsResponse:
+      type: object
+      required:
+        - textPhrases
+        - styles
+        - positions
+      properties:
+        textPhrases:
+          type: array
+          items:
+            $ref: "#/components/schemas/TextPhraseOption"
+        styles:
+          type: array
+          items:
+            $ref: "#/components/schemas/StylePreset"
+        positions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PositionPreset"
+    GenerateResponse:
+      type: object
+      required:
+        - imageDataUrl
+        - mimeType
+        - width
+        - height
+      properties:
+        imageDataUrl:
+          type: string
+          format: uri
+          description: 生成された画像のData URL（data:image/png;base64,... 形式）
+        mimeType:
+          type: string
+          enum: ["image/png", "image/jpeg"]
+          description: 画像のMIMEタイプ
+        width:
+          type: integer
+          description: 画像の幅（ピクセル、元画像と同じ）
+        height:
+          type: integer
+          description: 画像の高さ（ピクセル、元画像と同じ）
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: エラーメッセージ（ユーザー向け）

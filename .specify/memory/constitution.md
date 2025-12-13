@@ -1,15 +1,15 @@
 <!--
 Sync Impact Report:
-- Version change: 1.1.4 → 1.1.5
-- Modified principles: 
-  - 目的、スコープ、パフォーマンスセクション: 「nanobananapro」を正式名称「Nano Banana Pro」に変更
+- Version change: 1.1.5 → 1.2.0
+- Modified principles:
+  - 技術スタック（3.1）: 最新安定版へ更新（Node/Next.js/React/TS/pnpm/ESLint/Prettier/Tailwind 他）
+  - 開発環境（3.5）: ddev 前提を廃止し、標準 Docker Compose 前提へ移行
 - Added sections: N/A
 - Removed sections: N/A
 - Templates requiring updates: N/A (既存テンプレートで十分対応可能)
 - Follow-up TODOs:
   - RATIFICATION_DATE: 初版作成日が不明のため TODO として記載
   - リポジトリ URL: TODO として記載
-  - LAST_AMENDED_DATE: 正確な日付が不明のため TODO として記載
 -->
 
 # kuu-story-generator Constitution
@@ -17,8 +17,8 @@ Sync Impact Report:
 ## メタ情報
 
 - プロジェクト名: kuu-story-generator
-- バージョン: 1.1.5
-- 最終更新日: TODO(LAST_AMENDED_DATE): 正確な日付が不明
+- バージョン: 1.2.0
+- 最終更新日: 2025-12-12
 - オーナー: akihiro.tsutsumi
 - リポジトリ: TODO: GitHub リポジトリ URL を記載
 
@@ -44,7 +44,7 @@ Sync Impact Report:
 
 - ブラウザ上からの画像アップロード機能（ローカルファイル）
 - Google の画像生成AI「Nano Banana Pro」API による「くぅー」文字画像の生成
-- 生成画像の配置（位置・サイズ・回転）
+- 文字の配置はプリセットから選択（自由調整: 位置・サイズ・回転は行わない）
 - スタイルプリセット（例：ポップ、手書き、ホラー風）
 - 結果を 1 画像としてダウンロード
 - PC / モバイル対応レスポンシブデザイン
@@ -67,14 +67,14 @@ Sync Impact Report:
 
 | 種類                       | 採用技術 | バージョン |
 |--------------------------|---------|-----------|
-| 実行環境                 | Node.js | **v22.20.0** |
-| 言語                     | TypeScript | **v5.9.2** |
-| フレームワーク / Core    | Next.js (App Router) | **v16.0.3** |
-| UI ライブラリ           | React | **v19.2.0** |
-| スタイリング             | Tailwind CSS | **v3（最新安定版）** |
-| Lint                     | ESLint | **v9.37.0** |
-| フォーマッタ             | Prettier | **v3.6.2** |
-| パッケージマネージャ     | pnpm | **最新版**（packageManager で固定） |
+| 実行環境                 | Node.js | **v24.12.0 (LTS: Krypton)** |
+| 言語                     | TypeScript | **v5.9.3** |
+| フレームワーク / Core    | Next.js (App Router) | **v16.0.10** |
+| UI ライブラリ           | React | **v19.2.3** |
+| スタイリング             | Tailwind CSS | **v4.1.18** |
+| Lint                     | ESLint | **v9.39.1**（flat config: `eslint.config.mjs`） |
+| フォーマッタ             | Prettier | **v3.7.4** |
+| パッケージマネージャ     | pnpm | **v10.25.0**（packageManager で固定） |
 
 > `package.json` 例  
 > `"packageManager": "pnpm@<実環境のバージョン>"`
@@ -100,10 +100,14 @@ Sync Impact Report:
 
 ### 3.5 開発環境
 
-- ddev 環境を使用し、Node.js 用のコンテナを別途用意してアプリケーションを開発する
-- パッケージ操作はすべて **pnpm**
+- **ddev は使用しない**
+- 開発環境は **Docker + Docker Compose** を標準とする
+- Next.js 開発サーバーはコンテナ内で起動し、ホストへポート公開する
+- パッケージ操作はすべて **pnpm**（Corepack 経由）
 - **開発中は Prism を使用したモックサーバーを使用する**
-- ddev 環境内に Prism モックサーバー用のコンテナを用意してサーバーを立てる
+  - Prism は Docker Compose の別サービスとして起動する
+  - アプリからの既定接続先は `http://prism:4010`（Compose 内ネットワーク）
+  - ホストから直接叩く場合は `http://localhost:4111`
 
 ---
 
@@ -113,7 +117,7 @@ Sync Impact Report:
 2. **Server Components がデフォルト**
 3. **Mutation は Server Actions で統一**
 4. **API キーは必ずサーバー側に保持**
-5. **画像合成処理は基本的にクライアントで実施**
+5. **画像合成処理は外部AIで実施し、クライアントは保存導線を担う（サーバー永続化なし）**
 6. **外部サービス依存は `lib/api/` に集約**
 
 ---
@@ -193,7 +197,7 @@ Sync Impact Report:
 
 ## 9. UX / アクセシビリティ（UX / A11y）
 
-- アップロード → スタイル → くぅー生成 → 配置 → DL  
+- アップロード → スタイル → 生成 → 保存（DL）  
 　という流れが迷いなく終わる UI
 - エラー/通信中の明示
 - キーボード操作サポート
@@ -222,4 +226,4 @@ Sync Impact Report:
 
 ---
 
-**Version**: 1.1.5 | **Ratified**: TODO(RATIFICATION_DATE): 初版作成日が不明 | **Last Amended**: TODO(LAST_AMENDED_DATE): 正確な日付が不明
+**Version**: 1.2.0 | **Ratified**: TODO(RATIFICATION_DATE): 初版作成日が不明 | **Last Amended**: 2025-12-12
