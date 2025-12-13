@@ -138,10 +138,10 @@ export function KuuGenerator() {
     // バリデーション: 必須項目が選択されているか確認（クリーンアップ後の値で判定）
     const errors: string[] = []
     if (!textPhraseId) {
-      errors.push('入れる文言を選択してください')
+      errors.push('どのクゥーにする？を選択してください')
     }
     if (styleIds.length === 0) {
-      errors.push('文字スタイルを1つ以上選択してください')
+      errors.push('どんなクゥーにする？を1つ以上選択してください')
     }
     if (!positionId) {
       errors.push('配置場所を選択してください')
