@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { ClientErrorReporter } from './components/ClientErrorReporter'
 
 export const metadata: Metadata = {
   title: 'kuu-story-generator',
@@ -13,8 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" data-theme="glass">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <ClientErrorReporter />
+        {children}
+      </body>
     </html>
   )
 }
-
