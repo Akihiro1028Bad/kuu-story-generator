@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 function getNextBuildId(): string | undefined {
   try {
-    const data = (window as any).__NEXT_DATA__;
+    const data = (window as { __NEXT_DATA__?: { buildId?: string } }).__NEXT_DATA__;
     return typeof data?.buildId === "string" ? data.buildId : undefined;
   } catch {
     return undefined;

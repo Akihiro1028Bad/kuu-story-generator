@@ -50,7 +50,6 @@ export async function POST(req: Request) {
     truncated: bodyText.length > trimmed.length,
   };
 
-  // eslint-disable-next-line no-console
   console.error("[client-error]", log);
 
   return NextResponse.json({ ok: true });

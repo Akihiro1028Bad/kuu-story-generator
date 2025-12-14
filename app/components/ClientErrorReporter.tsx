@@ -21,7 +21,7 @@ type ClientErrorPayload = {
 
 function getNextBuildId(): string | undefined {
   try {
-    const data = (window as any).__NEXT_DATA__;
+    const data = (window as { __NEXT_DATA__?: { buildId?: string } }).__NEXT_DATA__;
     return typeof data?.buildId === "string" ? data.buildId : undefined;
   } catch {
     return undefined;
@@ -102,7 +102,7 @@ export function ClientErrorReporter({ endpoint = "/api/client-error" }: { endpoi
       };
 
       const key = [payload.message, payload.stack, payload.source, payload.lineno, payload.colno, payload.href]
-        .filter(Boolean)
+        .filter((v) => v != null)
         .join("|");
       if (shouldSend(key)) sendPayload(endpoint, payload);
     };
@@ -111,7 +111,7 @@ export function ClientErrorReporter({ endpoint = "/api/client-error" }: { endpoi
       const details = toErrorDetails(event.reason);
       const payload: ClientErrorPayload = { type: "unhandledrejection", ...base(), ...details };
 
-      const key = [payload.message, payload.stack, payload.href].filter(Boolean).join("|");
+      const key = [payload.message, payload.stack, payload.href].filter((v) => v != null).join("|");
       if (shouldSend(key)) sendPayload(endpoint, payload);
     };
 
