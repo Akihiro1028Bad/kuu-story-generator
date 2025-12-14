@@ -16,6 +16,7 @@ export function UploadSection({ onImageSelected, disabled, resetNonce }: UploadS
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // state ではなく ref に保持して、連続選択（batched updates）でも古い URL を取り逃がさない
   const objectUrlRef = useRef<string | null>(null)
@@ -42,6 +43,8 @@ export function UploadSection({ onImageSelected, disabled, resetNonce }: UploadS
       URL.revokeObjectURL(objectUrlRef.current)
       objectUrlRef.current = null
     }
+    // resetNonce が変わったときに状態をリセットする必要があるため、この useEffect での setState は適切
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreview(null)
     setDimensions(null)
     setError(null)
@@ -165,8 +168,6 @@ export function UploadSection({ onImageSelected, disabled, resetNonce }: UploadS
       handleFileChange(file)
     }
   }
-
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null)
 
   const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget
