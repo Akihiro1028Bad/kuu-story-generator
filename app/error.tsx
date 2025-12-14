@@ -23,6 +23,7 @@ async function reportError(error: Error & { digest?: string }) {
 
 export default function Error({
   error,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   reset: _reset, // 未使用: リロードに統一のため
 }: {
   error: Error & { digest?: string }
