@@ -1,22 +1,66 @@
 'use client'
 
-import { useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { useState, useRef, useEffect, ChangeEvent, DragEvent } from 'react'
 
 interface UploadSectionProps {
   onImageSelected: (file: File | null) => void
   disabled?: boolean
+  /**
+   * 親側の「最初からやり直す」等で子のプレビュー/URLも確実に破棄したい場合に使う。
+   * 値が変わるたびに内部状態と Object URL をクリアする。
+   */
+  resetNonce?: number
 }
 
-export function UploadSection({ onImageSelected, disabled }: UploadSectionProps) {
+export function UploadSection({ onImageSelected, disabled, resetNonce }: UploadSectionProps) {
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // state ではなく ref に保持して、連続選択（batched updates）でも古い URL を取り逃がさない
+  const objectUrlRef = useRef<string | null>(null)
+  // 画像選択の世代管理（古い Image.onload/onerror が後から来ても無視するため）
+  const selectionSeqRef = useRef(0)
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
+    }
+  }, [])
+
+  // 親のリセット操作に追従して、子側の Object URL/状態も確実に破棄する
+  useEffect(() => {
+    if (resetNonce === undefined) return
+
+    // 進行中の onload/onerror を無効化
+    selectionSeqRef.current += 1
+
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
+    setPreview(null)
+    setDimensions(null)
+    setError(null)
+    onImageSelected(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }, [resetNonce, onImageSelected])
 
   const handleFileChange = (file: File | null) => {
     setError(null)
+    // 新しい選択が始まった時点で、過去のコールバックをすべて「古い」とみなす
+    const seq = ++selectionSeqRef.current
 
     if (!file) {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
       onImageSelected(null)
       setPreview(null)
       return
@@ -24,28 +68,67 @@ export function UploadSection({ onImageSelected, disabled }: UploadSectionProps)
 
     if (file.type !== 'image/jpeg' && file.type !== 'image/png') {
       setError('JPEGまたはPNG形式の画像を選択してください。')
+      // 無効な入力でも、古いプレビューが残らないようにクリア
+      setPreview(null)
+      setDimensions(null)
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
       onImageSelected(null)
       return
     }
 
     if (file.size > 10 * 1024 * 1024) {
       setError('画像サイズは10MB以下にしてください。')
+      // 無効な入力でも、古いプレビューが残らないようにクリア
+      setPreview(null)
+      setDimensions(null)
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
       onImageSelected(null)
       return
     }
 
+    // 直前の Object URL を先に解放（連続選択でも必ず解放される）
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
+    setPreview(null)
+    setDimensions(null)
+
     const img = new Image()
     const objectUrl = URL.createObjectURL(file)
+    objectUrlRef.current = objectUrl
     
     img.onload = () => {
+      // 既に別のファイル選択が走っていたら、この onload は無視する
+      if (selectionSeqRef.current !== seq) {
+        // 自分の objectUrl がまだ残っていれば解放（保険）
+        URL.revokeObjectURL(objectUrl)
+        if (objectUrlRef.current === objectUrl) objectUrlRef.current = null
+        return
+      }
       onImageSelected(file)
       setPreview(objectUrl)
     }
     
     img.onerror = () => {
+      // 既に別のファイル選択が走っていたら、この onerror は無視する
+      if (selectionSeqRef.current !== seq) {
+        URL.revokeObjectURL(objectUrl)
+        if (objectUrlRef.current === objectUrl) objectUrlRef.current = null
+        return
+      }
       setError('画像の読み込みに失敗しました。')
       onImageSelected(null)
       URL.revokeObjectURL(objectUrl)
+      if (objectUrlRef.current === objectUrl) {
+        objectUrlRef.current = null
+      }
     }
     
     img.src = objectUrl
@@ -91,8 +174,11 @@ export function UploadSection({ onImageSelected, disabled }: UploadSectionProps)
   }
 
   const clearPreview = () => {
-    if (preview) {
-      URL.revokeObjectURL(preview)
+    // クリア操作も「新しい世代」とみなして、進行中の onload/onerror を無効化
+    selectionSeqRef.current += 1
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
     }
     setPreview(null)
     setDimensions(null)

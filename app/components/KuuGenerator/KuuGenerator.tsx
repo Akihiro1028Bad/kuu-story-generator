@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useEffect } from 'react'
+import { useActionState, useState, useEffect, useRef, useCallback } from 'react'
 import { generateKuu, type GenerateState } from './actions'
 import { UploadSection } from './UploadSection'
 import { StyleSection } from './StyleSection'
@@ -24,6 +24,9 @@ export function KuuGenerator() {
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [uploadedImage, setUploadedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  // batched updates で state がまだ反映されないケースでも Object URL を取り逃がさないため ref で管理
+  const imagePreviewUrlRef = useRef<string | null>(null)
+  const [uploadResetNonce, setUploadResetNonce] = useState(0)
   const [options, setOptions] = useState<OptionsData | null>(null)
   const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
   const [selectedText, setSelectedText] = useState<string>('')
@@ -36,6 +39,7 @@ export function KuuGenerator() {
 
   useEffect(() => {
     // 画面動作確認用: API通信せずローカルの presets から読み込む
+    let isMounted = true
     ;(async () => {
       try {
         const [{ textPhraseOptions }, { stylePresets }, { positionPresets }] = await Promise.all([
@@ -44,7 +48,7 @@ export function KuuGenerator() {
           import('@/app/lib/presets/positionPresets'),
         ])
         // 各プロパティが存在することを確認してから設定
-        if (textPhraseOptions && stylePresets && positionPresets) {
+        if (isMounted && textPhraseOptions && stylePresets && positionPresets) {
           setOptions({ 
             textPhrases: textPhraseOptions, 
             styles: stylePresets, 
@@ -53,8 +57,16 @@ export function KuuGenerator() {
         }
       } catch (error) {
         console.error('Failed to load options:', error)
+        if (isMounted) {
+          // エラー時もユーザーに通知（オプション読み込み失敗は致命的ではないが、ログには残す）
+          setGenerateErrorMessage('オプションの読み込みに失敗しました。ページを再読み込みしてください。')
+          setShowGenerateErrorModal(true)
+        }
       }
     })()
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   // presets が変更された（例: Fast Refresh）場合でも、古い選択IDが残って API に送られないようにクリーンアップ
@@ -92,10 +104,38 @@ export function KuuGenerator() {
 
 
   // 画像選択時の処理
-  const handleImageSelected = (file: File | null, preview: string | null) => {
+  const handleImageSelected = useCallback((file: File | null, preview: string | null) => {
+    // state を同期的に読むと batched updates で古い値になることがあるため ref を参照する
+    if (imagePreviewUrlRef.current && imagePreviewUrlRef.current !== preview) {
+      URL.revokeObjectURL(imagePreviewUrlRef.current)
+    }
+    imagePreviewUrlRef.current = preview
     setUploadedImage(file)
     setImagePreview(preview)
-  }
+  }, [])
+
+  // UploadSection に渡すコールバックは useCallback で安定化（子の useEffect 依存で無限ループしないように）
+  const handleUploadSelected = useCallback(
+    (file: File | null) => {
+      if (file) {
+        const objectUrl = URL.createObjectURL(file)
+        handleImageSelected(file, objectUrl)
+      } else {
+        handleImageSelected(null, null)
+      }
+    },
+    [handleImageSelected]
+  )
+
+  // コンポーネントのクリーンアップ時にObject URLを解放
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrlRef.current) {
+        URL.revokeObjectURL(imagePreviewUrlRef.current)
+        imagePreviewUrlRef.current = null
+      }
+    }
+  }, [])
 
   // ステップ1から2へ進む
   const handleNextToStep2 = () => {
@@ -171,6 +211,14 @@ export function KuuGenerator() {
 
   // 最初からやり直す
   const handleReset = () => {
+    // UploadSection 側のプレビュー/URL も確実に破棄させる
+    setUploadResetNonce((n) => n + 1)
+
+    // Object URLをクリーンアップ
+    if (imagePreviewUrlRef.current) {
+      URL.revokeObjectURL(imagePreviewUrlRef.current)
+      imagePreviewUrlRef.current = null
+    }
     setCurrentStep(1)
     setUploadedImage(null)
     setImagePreview(null)
@@ -324,15 +372,9 @@ export function KuuGenerator() {
                 <span>画像を選ぶ</span>
               </h2>
               <UploadSection
-                onImageSelected={(file) => {
-                  if (file) {
-                    const objectUrl = URL.createObjectURL(file)
-                    handleImageSelected(file, objectUrl)
-                  } else {
-                    handleImageSelected(null, null)
-                  }
-                }}
+                onImageSelected={handleUploadSelected}
                 disabled={pending}
+                resetNonce={uploadResetNonce}
               />
               <div className="mt-8 flex justify-end">
                 <button
@@ -526,6 +568,11 @@ export function KuuGenerator() {
                   src={state.imageDataUrl} 
                   alt="生成されたくぅー画像" 
                   className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
+                  onError={(e) => {
+                    console.error('Failed to load generated image:', e)
+                    setGenerateErrorMessage('生成された画像の読み込みに失敗しました。もう一度生成してください。')
+                    setShowGenerateErrorModal(true)
+                  }}
                 />
               </figure>
               <SaveActions
