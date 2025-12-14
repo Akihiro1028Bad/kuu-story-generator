@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 
 export default function GlobalError({
   error,
-  reset,
+  reset: _reset, // 未使用: リロードに統一のため
 }: {
   error: Error & { digest?: string }
   reset: () => void
@@ -36,12 +36,9 @@ export default function GlobalError({
         <div className="container mx-auto px-6 py-16 max-w-2xl">
           <div className="card bg-base-100 shadow-xl border border-base-200 rounded-2xl">
             <div className="card-body">
-              <h2 className="card-title text-2xl font-bold">アプリでエラーが発生しました</h2>
-              <p className="text-sm text-base-content/70">ページ更新で直る場合があります。</p>
+              <h2 className="card-title text-2xl font-bold">すいません、アプリでエラーが発生しました</h2>
+              <p className="text-sm text-base-content/70">以下のボタンからページの更新を試してください。</p>
               <div className="mt-4 flex gap-3">
-                <button className="btn btn-primary" onClick={() => reset()}>
-                  再試行
-                </button>
                 <button className="btn btn-ghost" onClick={() => location.reload()}>
                   ページを更新
                 </button>
