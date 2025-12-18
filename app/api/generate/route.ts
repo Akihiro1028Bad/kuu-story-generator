@@ -53,7 +53,12 @@ async function generateContentWithRetry<T>(
 
       const status = getHttpStatus(e)
       const delay = baseDelayMs * 2 ** (attempt - 1)
-      console.warn(`[Gemini] retrying after ${delay}ms (attempt ${attempt}/${maxAttempts}, status=${status})`)
+      console.warn(`[generate:warn] [Gemini] retrying after ${delay}ms`, {
+        attempt,
+        maxAttempts,
+        status,
+        errorMessage: e instanceof Error ? e.message : String(e),
+      })
       await sleep(delay)
     }
   }
@@ -93,13 +98,43 @@ type GeminiGenerateContentResponse = {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = request.headers.get('x-vercel-id') ?? `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  const startTime = Date.now()
+  
+  const log = (level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => {
+    const logData = {
+      requestId,
+      timestamp: new Date().toISOString(),
+      elapsed: Date.now() - startTime,
+      ...data,
+    }
+    const logMessage = `[generate:${level}] ${message}`
+    if (level === 'error') {
+      console.error(logMessage, logData)
+    } else if (level === 'warn') {
+      console.warn(logMessage, logData)
+    } else {
+      console.log(logMessage, logData)
+    }
+  }
+
   try {
+    log('info', 'Request received', {
+      method: request.method,
+      url: request.url,
+      userAgent: request.headers.get('user-agent'),
+      referer: request.headers.get('referer'),
+    })
+
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) {
+      log('error', 'Missing GEMINI_API_KEY')
       return NextResponse.json({ error: 'Missing GEMINI_API_KEY' }, { status: 500 })
     }
 
+    const formDataStartTime = Date.now()
     const formData = await request.formData()
+    log('info', 'FormData parsed', { elapsed: Date.now() - formDataStartTime })
     
     // 1. 入力取得
     const image = formData.get('image') as File
@@ -112,9 +147,29 @@ export async function POST(request: NextRequest) {
     
     // 複数選択されたスタイルIDを配列に変換
     const styleIds = styleIdsStr ? styleIdsStr.split(',').filter(id => id.trim()) : []
+
+    log('info', 'Request parameters extracted', {
+      hasImage: !!image,
+      imageName: image?.name,
+      imageSize: image?.size,
+      imageType: image?.type,
+      textPhraseId,
+      styleIds: styleIds.length > 0 ? styleIds : undefined,
+      styleIdsCount: styleIds.length,
+      positionId,
+      outputFormat,
+      originalWidth: originalWidthStr,
+      originalHeight: originalHeightStr,
+    })
     
     // 2. バリデーション
     if (!image || !textPhraseId || styleIds.length === 0 || !positionId) {
+      log('warn', 'Validation failed: missing required fields', {
+        hasImage: !!image,
+        hasTextPhraseId: !!textPhraseId,
+        styleIdsCount: styleIds.length,
+        hasPositionId: !!positionId,
+      })
       return NextResponse.json(
         { error: '必須項目が不足しています' },
         { status: 400 }
@@ -122,6 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (outputFormat !== 'png' && outputFormat !== 'jpeg') {
+      log('warn', 'Validation failed: invalid output format', { outputFormat })
       return NextResponse.json(
         { error: '無効な出力形式です' },
         { status: 400 }
@@ -131,6 +187,7 @@ export async function POST(request: NextRequest) {
     // バリデーション（各スタイルIDをチェック）
     const invalidStyleIds = styleIds.filter(id => !stylePresets.find(p => p.id === id))
     if (invalidStyleIds.length > 0) {
+      log('warn', 'Validation failed: invalid style IDs', { invalidStyleIds })
       return NextResponse.json(
         { error: '無効な選択肢が含まれています' },
         { status: 400 }
@@ -138,6 +195,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!validateSelections(textPhraseId, styleIds, positionId)) {
+      log('warn', 'Validation failed: validateSelections returned false', {
+        textPhraseId,
+        styleIds,
+        positionId,
+      })
       return NextResponse.json(
         { error: '無効な選択肢が含まれています' },
         { status: 400 }
@@ -146,6 +208,7 @@ export async function POST(request: NextRequest) {
 
     const textPhrase = textPhraseOptions.find(o => o.id === textPhraseId)
     if (!textPhrase) {
+      log('warn', 'Validation failed: text phrase not found', { textPhraseId })
       return NextResponse.json(
         { error: '無効な文言IDが指定されています' },
         { status: 400 }
@@ -157,6 +220,7 @@ export async function POST(request: NextRequest) {
       .filter((s): s is typeof stylePresets[number] => s !== undefined)
     
     if (styles.length === 0) {
+      log('warn', 'Validation failed: no valid styles found', { styleIds })
       return NextResponse.json(
         { error: '有効なスタイルが見つかりません' },
         { status: 400 }
@@ -165,32 +229,59 @@ export async function POST(request: NextRequest) {
 
     const position = positionPresets.find(p => p.id === positionId)
     if (!position) {
+      log('warn', 'Validation failed: position not found', { positionId })
       return NextResponse.json(
         { error: '無効な配置場所IDが指定されています' },
         { status: 400 }
       )
     }
+
+    log('info', 'Validation passed', {
+      textPhraseId,
+      styleIds,
+      positionId,
+      outputFormat,
+    })
     
     // 3. プロンプト生成
+    const promptStartTime = Date.now()
     const prompt = buildPrompt(textPhrase, styles, position)
-
-    // デバッグ用: 送信プロンプトをログ出力（本番は長さのみ）
-    if (process.env.NODE_ENV === 'production') {
-      console.log('[Gemini] prompt length:', prompt.length)
-    } else {
-      console.log('[Gemini] prompt:', prompt)
-    }
+    log('info', 'Prompt built', {
+      promptLength: prompt.length,
+      elapsed: Date.now() - promptStartTime,
+      promptPreview: process.env.NODE_ENV === 'production' ? undefined : prompt.substring(0, 200),
+    })
     
     // 4. 画像をbase64に変換（Geminiに送るため）
+    const imageConversionStartTime = Date.now()
     const imageBuffer = await image.arrayBuffer()
     const imageBase64 = Buffer.from(imageBuffer).toString('base64')
+    log('info', 'Image converted to base64', {
+      imageSize: image.size,
+      imageType: image.type,
+      base64Length: imageBase64.length,
+      elapsed: Date.now() - imageConversionStartTime,
+    })
 
     // 5. Gemini（Nano Banana）呼び出し
     const ai = new GoogleGenAI({ apiKey })
-    const model ='gemini-3-pro-image-preview'
+    const model = 'gemini-3-pro-image-preview'
 
+    log('info', 'Starting Gemini API call', {
+      model,
+      promptLength: prompt.length,
+      imageSize: image.size,
+      imageType: image.type,
+    })
+
+    const geminiStartTime = Date.now()
     const res = await generateContentWithRetry(
       () => {
+        const attemptStartTime = Date.now()
+        log('info', 'Gemini API call attempt', {
+          attemptStartTime: new Date(attemptStartTime).toISOString(),
+        })
+
         const req =
           ({
             model,
@@ -216,6 +307,12 @@ export async function POST(request: NextRequest) {
       },
       { maxAttempts: 3, baseDelayMs: 250 }
     )
+    
+    const geminiElapsed = Date.now() - geminiStartTime
+    log('info', 'Gemini API call completed', {
+      elapsed: geminiElapsed,
+      hasResponse: !!res,
+    })
 
     const parsed = res as unknown as GeminiGenerateContentResponse
     const parts = parsed.candidates?.[0]?.content?.parts ?? []
@@ -225,7 +322,21 @@ export async function POST(request: NextRequest) {
       (firstInline?.inlineData?.mimeType as string | undefined) ||
       (outputFormat ? `image/${outputFormat}` : 'image/png')
 
+    log('info', 'Parsing Gemini response', {
+      candidatesCount: parsed.candidates?.length ?? 0,
+      partsCount: parts.length,
+      hasInlineData: !!firstInline,
+      hasBase64: !!outBase64,
+      base64Length: outBase64?.length,
+      mimeType: outMime,
+    })
+
     if (!outBase64) {
+      log('error', 'No image returned from Gemini API', {
+        candidates: parsed.candidates?.length ?? 0,
+        parts: parts.length,
+        parsedResponse: JSON.stringify(parsed).substring(0, 500),
+      })
       throw new Error('No image returned from Gemini API')
     }
 
@@ -234,29 +345,56 @@ export async function POST(request: NextRequest) {
     // 6. 返却（Geminiのレスポンスにwidth/heightが無い場合があるため、元画像サイズを優先して返す）
     const originalWidth = Number.parseInt(originalWidthStr ?? '', 10)
     const originalHeight = Number.parseInt(originalHeightStr ?? '', 10)
+    const finalWidth = Number.isFinite(originalWidth) && originalWidth > 0 ? originalWidth : 1024
+    const finalHeight = Number.isFinite(originalHeight) && originalHeight > 0 ? originalHeight : 1024
 
-    return NextResponse.json({
+    const responseData = {
       model,
       imageDataUrl: outDataUrl,
       mimeType: outMime,
-      width: Number.isFinite(originalWidth) && originalWidth > 0 ? originalWidth : 1024,
-      height: Number.isFinite(originalHeight) && originalHeight > 0 ? originalHeight : 1024,
+      width: finalWidth,
+      height: finalHeight,
+    }
+
+    const totalElapsed = Date.now() - startTime
+    log('info', 'Sending success response', {
+      status: 200,
+      responseSize: JSON.stringify(responseData).length,
+      imageDataUrlLength: outDataUrl.length,
+      mimeType: outMime,
+      width: finalWidth,
+      height: finalHeight,
+      totalElapsed,
     })
+
+    return NextResponse.json(responseData)
   } catch (error) {
+    const totalElapsed = Date.now() - startTime
     const debug = toDebugJson(error)
-    // サーバーログは常に詳細を出す（運用時の調査用）
-    console.error('Generation error (debug):', debug)
+    
+    log('error', 'Generation failed', {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      debug,
+      totalElapsed,
+    })
 
     // レスポンスに詳細を載せるのは開発環境のみ
     const isProd = process.env.NODE_ENV === 'production'
-    return NextResponse.json(
-      isProd
-        ? { error: '画像生成に失敗しました。しばらくしてから再試行してください。' }
-        : {
-            error: '画像生成に失敗しました。しばらくしてから再試行してください。',
-            debug,
-          },
-      { status: 500 }
-    )
+    const responseData = isProd
+      ? { error: '画像生成に失敗しました。しばらくしてから再試行してください。' }
+      : {
+          error: '画像生成に失敗しました。しばらくしてから再試行してください。',
+          debug,
+        }
+
+    log('info', 'Sending error response', {
+      status: 500,
+      responseSize: JSON.stringify(responseData).length,
+      totalElapsed,
+    })
+
+    return NextResponse.json(responseData, { status: 500 })
   }
 }
