@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { generateKuu, type GenerateState } from './actions'
 import { UploadSection } from './UploadSection'
 import { StyleSection } from './StyleSection'
@@ -27,12 +28,15 @@ export function KuuGenerator() {
   const [options, setOptions] = useState<OptionsData | null>(null)
   const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
   const [selectedText, setSelectedText] = useState<string>('')
+  const [textPhraseCustom, setTextPhraseCustom] = useState<string>('')
   const [selectedStyles, setSelectedStyles] = useState<string[]>([])
   const [selectedPosition, setSelectedPosition] = useState<string>('')
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [showGenerateErrorModal, setShowGenerateErrorModal] = useState(false)
   const [generateErrorMessage, setGenerateErrorMessage] = useState<string>('')
+  const searchParams = useSearchParams()
+  const allowCustomText = searchParams.get('tsutsu') === '1'
 
   useEffect(() => {
     // 画面動作確認用: API通信せずローカルの presets から読み込む
@@ -90,6 +94,12 @@ export function KuuGenerator() {
     }
   }, [state])
 
+  useEffect(() => {
+    if (!allowCustomText) {
+      setTextPhraseCustom('')
+    }
+  }, [allowCustomText])
+
 
   // 画像選択時の処理
   const handleImageSelected = (file: File | null, preview: string | null) => {
@@ -117,6 +127,8 @@ export function KuuGenerator() {
     }
     // フォームから送信された値を使用（隠しフィールドから）
     let textPhraseId = (formData.get('textPhraseId') as string) || selectedText
+    const textPhraseCustomRaw = (formData.get('textPhraseCustom') as string) || textPhraseCustom
+    const textPhraseCustomValue = textPhraseCustomRaw.trim()
     const styleIdsRaw = (formData.get('styleIds') as string) || selectedStyles.join(',')
     let styleIds = styleIdsRaw
       ? styleIdsRaw.split(',').map(s => s.trim()).filter(Boolean)
@@ -137,7 +149,7 @@ export function KuuGenerator() {
 
     // バリデーション: 必須項目が選択されているか確認（クリーンアップ後の値で判定）
     const errors: string[] = []
-    if (!textPhraseId) {
+    if (!textPhraseId && !textPhraseCustomValue) {
       errors.push('どのクゥーにする？を選択してください')
     }
     if (styleIds.length === 0) {
@@ -155,6 +167,7 @@ export function KuuGenerator() {
     
     // 値を確実に設定
     formData.set('textPhraseId', textPhraseId)
+    formData.set('textPhraseCustom', textPhraseCustomValue)
     formData.set('styleIds', styleIds.join(','))
     formData.set('positionId', positionId)
     formData.set('outputFormat', outputFormat)
@@ -175,6 +188,7 @@ export function KuuGenerator() {
     setUploadedImage(null)
     setImagePreview(null)
     setSelectedText('')
+    setTextPhraseCustom('')
     setSelectedStyles([])
     setSelectedPosition('')
   }
@@ -401,6 +415,7 @@ export function KuuGenerator() {
               <form action={handleGenerate} noValidate>
                 <input type="hidden" name="outputFormat" value={outputFormat} />
                 <input type="hidden" name="textPhraseId" value={selectedText} />
+                <input type="hidden" name="textPhraseCustom" value={textPhraseCustom} />
                 <input type="hidden" name="styleIds" value={selectedStyles.join(',')} />
                 <input type="hidden" name="positionId" value={selectedPosition} />
                 {options && options.textPhrases && options.styles && options.positions ? (
@@ -408,9 +423,12 @@ export function KuuGenerator() {
                     options={options}
                     disabled={pending}
                     selectedText={selectedText}
+                    textPhraseCustom={textPhraseCustom}
+                    allowCustomText={allowCustomText}
                     selectedStyles={selectedStyles}
                     selectedPosition={selectedPosition}
                     onTextChange={setSelectedText}
+                    onTextPhraseCustomChange={setTextPhraseCustom}
                     onStylesChange={setSelectedStyles}
                     onPositionChange={setSelectedPosition}
                   />

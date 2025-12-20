@@ -73,6 +73,45 @@ describe('API Integration: /api/generate', () => {
     expect(json).toHaveProperty('height', 100)
   })
 
+  it('IT-002-2: 正常系 - フリーテキストがあれば文言IDなしでも生成できる', async () => {
+    generateContentMock.mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: 'result',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    })
+
+    const formData = new FormData()
+    formData.append('image', new File(['test'], 'test.png', { type: 'image/png' }))
+    formData.append('textPhraseCustom', 'これはカスタム')
+    formData.append('styleIds', '1')
+    formData.append('positionId', '1')
+    formData.append('outputFormat', 'png')
+    formData.append('originalWidth', '100')
+    formData.append('originalHeight', '100')
+
+    const req = new NextRequest('http://localhost/api/generate', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const response = await POST(req)
+    const json = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(json).toHaveProperty('imageDataUrl', 'data:image/png;base64,result')
+  })
+
   it('IT-003: 異常系 - 必須項目不足', async () => {
     const formData = new FormData()
     formData.append('image', new File(['test'], 'test.png', { type: 'image/png' }))
@@ -133,4 +172,3 @@ describe('API Integration: /api/generate', () => {
     expect(json).toHaveProperty('imageDataUrl', 'data:image/png;base64,result')
   })
 })
-

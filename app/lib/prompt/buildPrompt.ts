@@ -1,9 +1,8 @@
-import { TextPhraseOption } from '@/app/lib/presets/textPhraseOptions'
 import { StylePreset } from '@/app/lib/presets/stylePresets'
 import { PositionPreset } from '@/app/lib/presets/positionPresets'
 
 export function buildPrompt(
-  textPhrase: TextPhraseOption,
+  textPhraseText: string,
   styles: StylePreset[],
   position: PositionPreset
 ): string {
@@ -15,7 +14,7 @@ export function buildPrompt(
   const styleHints = summarizeStyleHints(styles)
 
   // 重要: 追加する文字列は「完全一致」を強く要求する（勝手な変換/装飾/追記を抑制）
-  const exactText = textPhrase.text
+  const exactText = textPhraseText
 
   return [
     '【タスク】提供された画像に文字を追加（画像編集）',
@@ -50,4 +49,3 @@ function summarizeStyleHints(styles: StylePreset[]): string {
   if (unique.length <= MAX_HINTS) return unique.join('、')
   return `${unique.slice(0, MAX_HINTS).join('、')}、ほか`
 }
-
