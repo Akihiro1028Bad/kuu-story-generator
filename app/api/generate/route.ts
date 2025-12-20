@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
     // 1. 入力取得
     const image = formData.get('image') as File
     const textPhraseId = formData.get('textPhraseId') as string
+    const textPhraseCustom = (formData.get('textPhraseCustom') as string | null)?.trim() ?? ''
     const styleIdsStr = formData.get('styleIds') as string
     const positionId = formData.get('positionId') as string
     const outputFormat = formData.get('outputFormat') as 'png' | 'jpeg'
@@ -154,6 +155,7 @@ export async function POST(request: NextRequest) {
       imageSize: image?.size,
       imageType: image?.type,
       textPhraseId,
+      hasTextPhraseCustom: Boolean(textPhraseCustom),
       styleIds: styleIds.length > 0 ? styleIds : undefined,
       styleIdsCount: styleIds.length,
       positionId,
@@ -163,10 +165,11 @@ export async function POST(request: NextRequest) {
     })
     
     // 2. バリデーション
-    if (!image || !textPhraseId || styleIds.length === 0 || !positionId) {
+    if (!image || (!textPhraseId && !textPhraseCustom) || styleIds.length === 0 || !positionId) {
       log('warn', 'Validation failed: missing required fields', {
         hasImage: !!image,
         hasTextPhraseId: !!textPhraseId,
+        hasTextPhraseCustom: Boolean(textPhraseCustom),
         styleIdsCount: styleIds.length,
         hasPositionId: !!positionId,
       })
@@ -194,9 +197,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!validateSelections(textPhraseId, styleIds, positionId)) {
+    if (!validateSelections(textPhraseId, styleIds, positionId, textPhraseCustom)) {
       log('warn', 'Validation failed: validateSelections returned false', {
         textPhraseId,
+        hasTextPhraseCustom: Boolean(textPhraseCustom),
         styleIds,
         positionId,
       })
@@ -206,8 +210,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const textPhrase = textPhraseOptions.find(o => o.id === textPhraseId)
-    if (!textPhrase) {
+    const textPhraseText = textPhraseCustom || textPhraseOptions.find(o => o.id === textPhraseId)?.text
+    if (!textPhraseText) {
       log('warn', 'Validation failed: text phrase not found', { textPhraseId })
       return NextResponse.json(
         { error: '無効な文言IDが指定されています' },
@@ -245,7 +249,7 @@ export async function POST(request: NextRequest) {
     
     // 3. プロンプト生成
     const promptStartTime = Date.now()
-    const prompt = buildPrompt(textPhrase, styles, position)
+    const prompt = buildPrompt(textPhraseText, styles, position)
     log('info', 'Prompt built', {
       promptLength: prompt.length,
       elapsed: Date.now() - promptStartTime,

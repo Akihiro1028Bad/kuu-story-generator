@@ -30,6 +30,7 @@ export async function generateKuu(
     // 1. FormDataから値を取得
     const image = formData.get('image') as File
     const textPhraseId = formData.get('textPhraseId') as string
+    const textPhraseCustom = (formData.get('textPhraseCustom') as string | null)?.trim() ?? ''
     const styleIdsStr = formData.get('styleIds') as string
     const positionId = formData.get('positionId') as string
     const outputFormat = formData.get('outputFormat') as 'png' | 'jpeg'
@@ -38,7 +39,7 @@ export async function generateKuu(
     const styleIds = styleIdsStr ? styleIdsStr.split(',').filter(id => id.trim()) : []
     
     // 2. 簡易バリデーション
-    if (!image || !textPhraseId || styleIds.length === 0 || !positionId) {
+    if (!image || (!textPhraseId && !textPhraseCustom) || styleIds.length === 0 || !positionId) {
       return {
         status: 'error',
         message: '必須項目が不足しています。画像とすべての選択肢を選んでください。',
@@ -88,6 +89,7 @@ export async function generateKuu(
     const formDataForAPI = new FormData()
     formDataForAPI.append('image', image)
     formDataForAPI.append('textPhraseId', textPhraseId)
+    if (textPhraseCustom) formDataForAPI.append('textPhraseCustom', textPhraseCustom)
     formDataForAPI.append('styleIds', styleIds.join(','))
     formDataForAPI.append('positionId', positionId)
     formDataForAPI.append('outputFormat', outputFormat)

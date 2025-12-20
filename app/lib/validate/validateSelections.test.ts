@@ -12,6 +12,10 @@ describe('validateSelections', () => {
     expect(validateSelections('1', ['1', '2'], '1')).toBe(true)
   })
 
+  it('UT-003-3: 正常系 - フリーテキストがあれば文言IDなしでも有効', () => {
+    expect(validateSelections('', ['1'], '1', 'これはカスタム')).toBe(true)
+  })
+
   it('UT-004: 異常系 - 無効な選択肢ID', () => {
     expect(validateSelections('invalid', ['1'], '1')).toBe(false)
   })
@@ -25,5 +29,8 @@ describe('validateSelections', () => {
     expect(validateSelections('1', [], '1')).toBe(false)
     expect(validateSelections('1', ['1'], '')).toBe(false)
   })
-})
 
+  it('UT-005-2: 異常系 - フリーテキストが空白のみ', () => {
+    expect(validateSelections('', ['1'], '1', '   ')).toBe(false)
+  })
+})

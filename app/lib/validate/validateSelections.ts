@@ -5,11 +5,13 @@ import { positionPresets } from '@/app/lib/presets/positionPresets'
 export function validateSelections(
   textPhraseId: string,
   styleIds: string[],
-  positionId: string
+  positionId: string,
+  textPhraseCustom?: string
 ): boolean {
-  if (!textPhraseId || styleIds.length === 0 || !positionId) return false
+  const hasCustomText = Boolean(textPhraseCustom?.trim())
+  if ((!textPhraseId && !hasCustomText) || styleIds.length === 0 || !positionId) return false
   
-  const textPhrase = textPhraseOptions.find(o => o.id === textPhraseId)
+  const textPhrase = hasCustomText ? true : textPhraseOptions.find(o => o.id === textPhraseId)
   const position = positionPresets.find(p => p.id === positionId)
   
   // すべてのスタイルIDが有効かチェック
@@ -17,4 +19,3 @@ export function validateSelections(
 
   return !!(textPhrase && allStylesValid && position)
 }
-

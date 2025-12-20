@@ -38,9 +38,12 @@ interface StyleSectionProps {
   } | null
   disabled?: boolean
   selectedText?: string
+  textPhraseCustom?: string
+  allowCustomText?: boolean
   selectedStyles?: string[]
   selectedPosition?: string
   onTextChange?: (value: string) => void
+  onTextPhraseCustomChange?: (value: string) => void
   onStylesChange?: (values: string[]) => void
   onPositionChange?: (value: string) => void
 }
@@ -49,13 +52,17 @@ export function StyleSection({
   options, 
   disabled,
   selectedText: controlledSelectedText,
+  textPhraseCustom: controlledTextPhraseCustom,
+  allowCustomText = false,
   selectedStyles: controlledSelectedStyles,
   selectedPosition: controlledSelectedPosition,
   onTextChange,
+  onTextPhraseCustomChange,
   onStylesChange,
   onPositionChange,
 }: StyleSectionProps) {
   const [internalSelectedText, setInternalSelectedText] = useState<string>('')
+  const [internalTextPhraseCustom, setInternalTextPhraseCustom] = useState<string>('')
   const [internalSelectedStyles, setInternalSelectedStyles] = useState<string[]>([])
   const [internalSelectedPosition, setInternalSelectedPosition] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -67,6 +74,8 @@ export function StyleSection({
   
   // コントロールされている場合は親の値を使用、そうでなければ内部状態を使用
   const selectedText = controlledSelectedText !== undefined ? controlledSelectedText : internalSelectedText
+  const textPhraseCustom =
+    controlledTextPhraseCustom !== undefined ? controlledTextPhraseCustom : internalTextPhraseCustom
   const selectedStyles = controlledSelectedStyles !== undefined ? controlledSelectedStyles : internalSelectedStyles
   const selectedPosition = controlledSelectedPosition !== undefined ? controlledSelectedPosition : internalSelectedPosition
   
@@ -86,6 +95,14 @@ export function StyleSection({
       onTextChange(value)
     } else {
       setInternalSelectedText(value)
+    }
+  }
+
+  const handleTextPhraseCustomChange = (value: string) => {
+    if (onTextPhraseCustomChange) {
+      onTextPhraseCustomChange(value)
+    } else {
+      setInternalTextPhraseCustom(value)
     }
   }
   
@@ -192,6 +209,23 @@ export function StyleSection({
             )
           })}
         </div>
+        {allowCustomText && (
+          <div className="mt-4">
+            <label className="label pb-1">
+              <span className="label-text text-sm font-semibold text-base-content/80">フリーテキスト（任意）</span>
+            </label>
+            <input
+              type="text"
+              placeholder="例: これはわたしだけのクゥー"
+              value={textPhraseCustom}
+              onChange={(e) => handleTextPhraseCustomChange(e.target.value)}
+              className="input input-bordered w-full"
+              disabled={disabled}
+              aria-label="フリーテキスト入力"
+            />
+            <p className="mt-2 text-xs text-base-content/60">入力がある場合はフリーテキストを優先します</p>
+          </div>
+        )}
       </div>
 
       {/* 2. スタイル選択 - タグ形式（感情・雰囲気ベース） */}

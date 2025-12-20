@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildPrompt } from './buildPrompt'
-import { TextPhraseOption } from '@/app/lib/presets/textPhraseOptions'
 import { StylePreset } from '@/app/lib/presets/stylePresets'
 import { PositionPreset } from '@/app/lib/presets/positionPresets'
 
 describe('buildPrompt', () => {
-  const mockTextPhrase: TextPhraseOption = { id: 'kuu', label: 'くぅー', text: 'くぅー' }
+  const mockTextPhrase = 'くぅー'
   const mockStyle: StylePreset = { id: 'pop', label: 'ポップ', description: 'desc', promptHint: 'ポップなスタイル', category: 'pop' }
   const mockPosition: PositionPreset = { id: 'top-left', label: '左上', placementHint: '画像の左上' }
 
