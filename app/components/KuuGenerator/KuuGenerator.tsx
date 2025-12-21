@@ -26,6 +26,7 @@ export function KuuGenerator() {
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [options, setOptions] = useState<OptionsData | null>(null)
   const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
   const [selectedText, setSelectedText] = useState<string>('')
@@ -37,6 +38,8 @@ export function KuuGenerator() {
   const [showGenerateErrorModal, setShowGenerateErrorModal] = useState(false)
   const [generateErrorMessage, setGenerateErrorMessage] = useState<string>('')
   const [imageLoadError, setImageLoadError] = useState(false)
+  const [resetUploadTrigger, setResetUploadTrigger] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
   const searchParams = useSearchParams()
   const allowCustomText = searchParams.get('tsutsu') === '1'
 
@@ -105,14 +108,63 @@ export function KuuGenerator() {
 
 
   // 画像選択時の処理
-  const handleImageSelected = (url: string | null) => {
-    setUploadedImageUrl(url)
-    setImagePreview(url)
+  const handleImageSelected = (remoteUrl: string | null, localUrl?: string | null) => {
+    setUploadedImageUrl(remoteUrl)
+    
+    // ローカルURLがある場合は優先して表示（即時表示のため）
+    if (localUrl) {
+      setLocalPreviewUrl(localUrl)
+      setImagePreview(localUrl)
+    } else {
+      setLocalPreviewUrl(null)
+      setImagePreview(remoteUrl)
+    }
   }
 
-  // ステップ1から2へ進む
+  // アップロード状態変更時の処理
+  const handleUploadStateChange = (uploading: boolean) => {
+    setIsUploading(uploading)
+  }
+
+  // リモートURLのプリロード処理
+  useEffect(() => {
+    if (!uploadedImageUrl) return
+
+    // 既存のプリロードリンクを削除（重複防止）
+    const existingLink = document.querySelector(`link[rel="preload"][href="${uploadedImageUrl}"]`)
+    if (existingLink) {
+      existingLink.remove()
+    }
+
+    // 新しいプリロードリンクを追加
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = uploadedImageUrl
+    link.setAttribute('fetchpriority', 'high')
+    document.head.appendChild(link)
+
+    // クリーンアップ関数
+    return () => {
+      const linkToRemove = document.querySelector(`link[rel="preload"][href="${uploadedImageUrl}"]`)
+      if (linkToRemove) {
+        linkToRemove.remove()
+      }
+    }
+  }, [uploadedImageUrl])
+
+  // ローカルBlob URLのクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(localPreviewUrl)
+      }
+    }
+  }, [localPreviewUrl])
+
+  // ステップ1から2へ進む（ローカルURLがあればそれでも進める）
   const handleNextToStep2 = () => {
-    if (uploadedImageUrl) {
+    if (uploadedImageUrl || localPreviewUrl) {
       setCurrentStep(2)
     }
   }
@@ -120,6 +172,28 @@ export function KuuGenerator() {
   // ステップ2から1へ戻る
   const handleBackToStep1 = () => {
     setCurrentStep(1)
+    
+    // 画像状態をクリア（ステップ1は「画像選択」のステップなので、戻る = 選択をやり直す）
+    setUploadedImageUrl(null)
+    setImagePreview(null)
+    
+    // ローカルBlob URLのクリーンアップ
+    if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(localPreviewUrl)
+    }
+    setLocalPreviewUrl(null)
+    
+    // アップロード状態をリセット
+    setIsUploading(false)
+    
+    // UploadSectionをリセット（親子の状態を同期）
+    setResetUploadTrigger(prev => prev + 1)
+    
+    // ステップ2の選択状態は保持（ユーザーが再度ステップ2に進んだ時に選択が残る）
+    // 完全にリセットしたい場合は以下のコメントを外す：
+    // setSelectedText('')
+    // setSelectedStyles([])
+    // setSelectedPosition('')
   }
 
   // ステップ2から3へ進む（生成実行）
@@ -190,6 +264,11 @@ export function KuuGenerator() {
     setCurrentStep(1)
     setUploadedImageUrl(null)
     setImagePreview(null)
+    // ローカルBlob URLのクリーンアップ
+    if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(localPreviewUrl)
+    }
+    setLocalPreviewUrl(null)
     setSelectedText('')
     setTextPhraseCustom('')
     setSelectedStyles([])
@@ -201,7 +280,7 @@ export function KuuGenerator() {
     const step1Active = currentStep === 1
     const step2Active = currentStep === 2
     const step3Active = currentStep === 3
-    const step1Completed = uploadedImageUrl && !step1Active
+    const step1Completed = (uploadedImageUrl || localPreviewUrl) && !step1Active
     const step2Completed = (step3Active || (uploadedImageUrl && selectedText && selectedStyles.length > 0 && selectedPosition)) && !step2Active
 
     const CheckIcon = ({ className }: { className?: string }) => (
@@ -342,13 +421,15 @@ export function KuuGenerator() {
               </h2>
               <UploadSection
                 onImageSelected={handleImageSelected}
+                onUploadStateChange={handleUploadStateChange}
                 disabled={pending}
+                resetTrigger={resetUploadTrigger}
               />
               <div className="mt-8 flex justify-end">
                 <button
                   type="button"
                   onClick={handleNextToStep2}
-                  disabled={!uploadedImageUrl || pending}
+                  disabled={(!uploadedImageUrl && !localPreviewUrl) || pending || isUploading}
                   className="h-16 px-10 rounded-xl font-bold text-lg text-white
                     bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500
                     bg-[length:200%_200%] shadow-lg
@@ -405,6 +486,13 @@ export function KuuGenerator() {
                     src={imagePreview} 
                     alt="選択された画像のプレビュー" 
                     className="max-h-32 rounded-lg shadow-md"
+                    fetchPriority="high"
+                    onLoad={() => {
+                      // ローカルURL表示中でリモートURLが準備できている場合、リモートURLに切り替え
+                      if (localPreviewUrl && uploadedImageUrl && imagePreview === localPreviewUrl) {
+                        setImagePreview(uploadedImageUrl)
+                      }
+                    }}
                   />
                 </div>
               )}
