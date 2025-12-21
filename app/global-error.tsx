@@ -4,8 +4,7 @@ import { useEffect } from 'react'
 
 export default function GlobalError({
   error,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  reset: _reset, // 未使用: リロードに統一のため
+  reset,
 }: {
   error: Error & { digest?: string }
   reset: () => void
@@ -40,6 +39,9 @@ export default function GlobalError({
               <h2 className="card-title text-2xl font-bold">すいません、アプリでエラーが発生しました</h2>
               <p className="text-sm text-base-content/70">以下のボタンからページの更新を試してください。</p>
               <div className="mt-4 flex gap-3">
+                <button className="btn btn-primary" onClick={() => reset()}>
+                  もう一度試す
+                </button>
                 <button className="btn btn-ghost" onClick={() => location.reload()}>
                   ページを更新
                 </button>

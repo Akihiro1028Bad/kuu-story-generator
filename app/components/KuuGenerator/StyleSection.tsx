@@ -30,6 +30,8 @@ function shuffleArray<T>(items: T[]): T[] {
   return arr
 }
 
+export const __test__ = { randomIntInclusive, shuffleArray }
+
 interface StyleSectionProps {
   options: {
     textPhrases: TextPhraseOption[]

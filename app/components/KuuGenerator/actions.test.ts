@@ -95,6 +95,30 @@ describe('generateKuu', () => {
     expect(result.status).toBe('success')
   })
 
+  it('UT-011: モックモードでcontent-typeが空の場合はoutputFormatを使う', async () => {
+    delete process.env.KUU_USE_REAL_API
+    process.env.KUU_MOCK_DELAY_MS = '0'
+    const formData = new FormData()
+    formData.append('imageUrl', 'https://example.com/image.jpg')
+    formData.append('textPhraseId', 'phrase1')
+    formData.append('styleIds', 'style1')
+    formData.append('positionId', 'pos1')
+    formData.append('outputFormat', 'png')
+
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
+    } as unknown as Response)
+
+    const result = await generateKuu({ status: 'idle' }, formData)
+
+    expect(result.status).toBe('success')
+    if (result.status === 'success') {
+      expect(result.mimeType).toBe('image/png')
+    }
+  })
+
   it('UT-028: 互換期間中にimageUrlとimageDataUrlの両方を扱える（正常系）', async () => {
     process.env.KUU_USE_REAL_API = '1'
     headersMock.mockResolvedValue(new Headers({ host: 'localhost:3000', 'x-forwarded-proto': 'http' }))
@@ -123,6 +147,35 @@ describe('generateKuu', () => {
     if (result.status === 'success') {
       expect(result.imageUrl).toBe('https://example.public.blob.vercel-storage.com/generated/test.jpg')
     }
+  })
+
+  it('UT-028a: 実APIでtextPhraseCustomがあれば送信する', async () => {
+    process.env.KUU_USE_REAL_API = '1'
+    headersMock.mockResolvedValue(new Headers({ host: 'localhost:3000', 'x-forwarded-proto': 'http' }))
+
+    const formData = new FormData()
+    formData.append('imageUrl', 'https://example.com/image.jpg')
+    formData.append('textPhraseId', 'phrase1')
+    formData.append('textPhraseCustom', ' custom ')
+    formData.append('styleIds', 'style1')
+    formData.append('positionId', 'pos1')
+    formData.append('outputFormat', 'jpeg')
+
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        imageUrl: 'https://example.public.blob.vercel-storage.com/generated/test.jpg',
+        mimeType: 'image/jpeg',
+        width: 100,
+        height: 100,
+      }),
+    } as unknown as Response)
+
+    await generateKuu({ status: 'idle' }, formData)
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const body = fetchCall?.[1]?.body as FormData
+
+    expect(body.get('textPhraseCustom')).toBe('custom')
   })
 
   it('UT-031: 無効なURL形式でエラーを返す（異常系）', async () => {
@@ -301,6 +354,55 @@ describe('generateKuu', () => {
       status: 400,
       statusText: 'Bad Request',
       json: vi.fn().mockResolvedValue('oops'),
+    } as unknown as Response)
+
+    const result = await generateKuu({ status: 'idle' }, formData)
+
+    expect(result.status).toBe('error')
+  })
+
+  it('UT-038a: 実APIでerrorが非文字列なら汎用メッセージにする', async () => {
+    process.env.KUU_USE_REAL_API = '1'
+    headersMock.mockResolvedValue(new Headers({ host: 'localhost:3000', 'x-forwarded-proto': 'http' }))
+
+    const formData = new FormData()
+    formData.append('imageUrl', 'https://example.com/image.jpg')
+    formData.append('textPhraseId', 'phrase1')
+    formData.append('styleIds', 'style1')
+    formData.append('positionId', 'pos1')
+    formData.append('outputFormat', 'jpeg')
+
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: vi.fn().mockResolvedValue({ error: 123 }),
+    } as unknown as Response)
+
+    const result = await generateKuu({ status: 'idle' }, formData)
+
+    expect(result.status).toBe('error')
+    if (result.status === 'error') {
+      expect(result.message).toContain('画像生成に失敗しました')
+    }
+  })
+
+  it('UT-038b: 実APIでerrorレスポンスのJSONが壊れていても処理する', async () => {
+    process.env.KUU_USE_REAL_API = '1'
+    headersMock.mockResolvedValue(new Headers({ host: 'localhost:3000', 'x-forwarded-proto': 'http' }))
+
+    const formData = new FormData()
+    formData.append('imageUrl', 'https://example.com/image.jpg')
+    formData.append('textPhraseId', 'phrase1')
+    formData.append('styleIds', 'style1')
+    formData.append('positionId', 'pos1')
+    formData.append('outputFormat', 'jpeg')
+
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Server Error',
+      json: vi.fn().mockRejectedValue(new Error('bad json')),
     } as unknown as Response)
 
     const result = await generateKuu({ status: 'idle' }, formData)

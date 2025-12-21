@@ -21,7 +21,15 @@ interface OptionsData {
 
 type Step = 1 | 2 | 3
 
-export function KuuGenerator() {
+interface KuuGeneratorProps {
+  initialSelections?: {
+    text?: string
+    styles?: string[]
+    position?: string
+  }
+}
+
+export function KuuGenerator({ initialSelections }: KuuGeneratorProps = {}) {
   const [state, formAction, pending] = useActionState(generateKuu, initialState)
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
@@ -29,10 +37,10 @@ export function KuuGenerator() {
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [options, setOptions] = useState<OptionsData | null>(null)
   const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
-  const [selectedText, setSelectedText] = useState<string>('')
+  const [selectedText, setSelectedText] = useState<string>(initialSelections?.text ?? '')
   const [textPhraseCustom, setTextPhraseCustom] = useState<string>('')
-  const [selectedStyles, setSelectedStyles] = useState<string[]>([])
-  const [selectedPosition, setSelectedPosition] = useState<string>('')
+  const [selectedStyles, setSelectedStyles] = useState<string[]>(initialSelections?.styles ?? [])
+  const [selectedPosition, setSelectedPosition] = useState<string>(initialSelections?.position ?? '')
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [showGenerateErrorModal, setShowGenerateErrorModal] = useState(false)
