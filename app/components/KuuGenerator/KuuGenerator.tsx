@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import { generateKuu, type GenerateState } from './actions'
 import { UploadSection } from './UploadSection'
 import { StyleSection } from './StyleSection'
@@ -20,21 +21,33 @@ interface OptionsData {
 
 type Step = 1 | 2 | 3
 
-export function KuuGenerator() {
+interface KuuGeneratorProps {
+  initialSelections?: {
+    text?: string
+    styles?: string[]
+    position?: string
+  }
+}
+
+export function KuuGenerator({ initialSelections }: KuuGeneratorProps = {}) {
   const [state, formAction, pending] = useActionState(generateKuu, initialState)
   const [currentStep, setCurrentStep] = useState<Step>(1)
-  const [uploadedImage, setUploadedImage] = useState<File | null>(null)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
   const [options, setOptions] = useState<OptionsData | null>(null)
   const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
-  const [selectedText, setSelectedText] = useState<string>('')
+  const [selectedText, setSelectedText] = useState<string>(initialSelections?.text ?? '')
   const [textPhraseCustom, setTextPhraseCustom] = useState<string>('')
-  const [selectedStyles, setSelectedStyles] = useState<string[]>([])
-  const [selectedPosition, setSelectedPosition] = useState<string>('')
+  const [selectedStyles, setSelectedStyles] = useState<string[]>(initialSelections?.styles ?? [])
+  const [selectedPosition, setSelectedPosition] = useState<string>(initialSelections?.position ?? '')
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [showGenerateErrorModal, setShowGenerateErrorModal] = useState(false)
   const [generateErrorMessage, setGenerateErrorMessage] = useState<string>('')
+  const [imageLoadError, setImageLoadError] = useState(false)
+  const [resetUploadTrigger, setResetUploadTrigger] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
   const searchParams = useSearchParams()
   const allowCustomText = searchParams.get('tsutsu') === '1'
 
@@ -83,6 +96,7 @@ export function KuuGenerator() {
     // そのため state 全体の更新に追従して遷移する。
     if (state.status === 'success') {
       setCurrentStep(3)
+      setImageLoadError(false)
     }
   }, [state])
 
@@ -102,14 +116,63 @@ export function KuuGenerator() {
 
 
   // 画像選択時の処理
-  const handleImageSelected = (file: File | null, preview: string | null) => {
-    setUploadedImage(file)
-    setImagePreview(preview)
+  const handleImageSelected = (remoteUrl: string | null, localUrl?: string | null) => {
+    setUploadedImageUrl(remoteUrl)
+    
+    // ローカルURLがある場合は優先して表示（即時表示のため）
+    if (localUrl) {
+      setLocalPreviewUrl(localUrl)
+      setImagePreview(localUrl)
+    } else {
+      setLocalPreviewUrl(null)
+      setImagePreview(remoteUrl)
+    }
   }
 
-  // ステップ1から2へ進む
+  // アップロード状態変更時の処理
+  const handleUploadStateChange = (uploading: boolean) => {
+    setIsUploading(uploading)
+  }
+
+  // リモートURLのプリロード処理
+  useEffect(() => {
+    if (!uploadedImageUrl) return
+
+    // 既存のプリロードリンクを削除（重複防止）
+    const existingLink = document.querySelector(`link[rel="preload"][href="${uploadedImageUrl}"]`)
+    if (existingLink) {
+      existingLink.remove()
+    }
+
+    // 新しいプリロードリンクを追加
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = uploadedImageUrl
+    link.setAttribute('fetchpriority', 'high')
+    document.head.appendChild(link)
+
+    // クリーンアップ関数
+    return () => {
+      const linkToRemove = document.querySelector(`link[rel="preload"][href="${uploadedImageUrl}"]`)
+      if (linkToRemove) {
+        linkToRemove.remove()
+      }
+    }
+  }, [uploadedImageUrl])
+
+  // ローカルBlob URLのクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(localPreviewUrl)
+      }
+    }
+  }, [localPreviewUrl])
+
+  // ステップ1から2へ進む（ローカルURLがあればそれでも進める）
   const handleNextToStep2 = () => {
-    if (uploadedImage) {
+    if (uploadedImageUrl || localPreviewUrl) {
       setCurrentStep(2)
     }
   }
@@ -117,13 +180,35 @@ export function KuuGenerator() {
   // ステップ2から1へ戻る
   const handleBackToStep1 = () => {
     setCurrentStep(1)
+    
+    // 画像状態をクリア（ステップ1は「画像選択」のステップなので、戻る = 選択をやり直す）
+    setUploadedImageUrl(null)
+    setImagePreview(null)
+    
+    // ローカルBlob URLのクリーンアップ
+    if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(localPreviewUrl)
+    }
+    setLocalPreviewUrl(null)
+    
+    // アップロード状態をリセット
+    setIsUploading(false)
+    
+    // UploadSectionをリセット（親子の状態を同期）
+    setResetUploadTrigger(prev => prev + 1)
+    
+    // ステップ2の選択状態は保持（ユーザーが再度ステップ2に進んだ時に選択が残る）
+    // 完全にリセットしたい場合は以下のコメントを外す：
+    // setSelectedText('')
+    // setSelectedStyles([])
+    // setSelectedPosition('')
   }
 
   // ステップ2から3へ進む（生成実行）
   const handleGenerate = async (formData: FormData) => {
     // フォームデータに選択値を設定（隠しフィールドから読み取るか、状態から設定）
-    if (uploadedImage) {
-      formData.set('image', uploadedImage)
+    if (uploadedImageUrl) {
+      formData.set('imageUrl', uploadedImageUrl)
     }
     // フォームから送信された値を使用（隠しフィールドから）
     let textPhraseId = (formData.get('textPhraseId') as string) || selectedText
@@ -185,8 +270,13 @@ export function KuuGenerator() {
   // 最初からやり直す
   const handleReset = () => {
     setCurrentStep(1)
-    setUploadedImage(null)
+    setUploadedImageUrl(null)
     setImagePreview(null)
+    // ローカルBlob URLのクリーンアップ
+    if (localPreviewUrl && localPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(localPreviewUrl)
+    }
+    setLocalPreviewUrl(null)
     setSelectedText('')
     setTextPhraseCustom('')
     setSelectedStyles([])
@@ -198,8 +288,8 @@ export function KuuGenerator() {
     const step1Active = currentStep === 1
     const step2Active = currentStep === 2
     const step3Active = currentStep === 3
-    const step1Completed = uploadedImage && !step1Active
-    const step2Completed = (step3Active || (uploadedImage && selectedText && selectedStyles.length > 0 && selectedPosition)) && !step2Active
+    const step1Completed = (uploadedImageUrl || localPreviewUrl) && !step1Active
+    const step2Completed = (step3Active || (uploadedImageUrl && selectedText && selectedStyles.length > 0 && selectedPosition)) && !step2Active
 
     const CheckIcon = ({ className }: { className?: string }) => (
       <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -338,21 +428,16 @@ export function KuuGenerator() {
                 <span>画像を選ぶ</span>
               </h2>
               <UploadSection
-                onImageSelected={(file) => {
-                  if (file) {
-                    const objectUrl = URL.createObjectURL(file)
-                    handleImageSelected(file, objectUrl)
-                  } else {
-                    handleImageSelected(null, null)
-                  }
-                }}
+                onImageSelected={handleImageSelected}
+                onUploadStateChange={handleUploadStateChange}
                 disabled={pending}
+                resetTrigger={resetUploadTrigger}
               />
               <div className="mt-8 flex justify-end">
                 <button
                   type="button"
                   onClick={handleNextToStep2}
-                  disabled={!uploadedImage || pending}
+                  disabled={(!uploadedImageUrl && !localPreviewUrl) || pending || isUploading}
                   className="h-16 px-10 rounded-xl font-bold text-lg text-white
                     bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500
                     bg-[length:200%_200%] shadow-lg
@@ -409,11 +494,19 @@ export function KuuGenerator() {
                     src={imagePreview} 
                     alt="選択された画像のプレビュー" 
                     className="max-h-32 rounded-lg shadow-md"
+                    fetchPriority="high"
+                    onLoad={() => {
+                      // ローカルURL表示中でリモートURLが準備できている場合、リモートURLに切り替え
+                      if (localPreviewUrl && uploadedImageUrl && imagePreview === localPreviewUrl) {
+                        setImagePreview(uploadedImageUrl)
+                      }
+                    }}
                   />
                 </div>
               )}
               <form action={handleGenerate} noValidate>
                 <input type="hidden" name="outputFormat" value={outputFormat} />
+                <input type="hidden" name="imageUrl" value={uploadedImageUrl ?? ''} />
                 <input type="hidden" name="textPhraseId" value={selectedText} />
                 <input type="hidden" name="textPhraseCustom" value={textPhraseCustom} />
                 <input type="hidden" name="styleIds" value={selectedStyles.join(',')} />
@@ -538,16 +631,55 @@ export function KuuGenerator() {
               <h2 className="card-title text-2xl font-bold text-base-content justify-center mb-6">
                 ✨ クゥーが誕生しました！
               </h2>
+              {imageLoadError && (
+                <div className="mb-6 alert alert-error shadow-xl rounded-xl border-2 border-error/30" role="alert" aria-live="polite">
+                  <div>
+                    <h3 className="font-bold text-base mb-1">画像の表示に失敗しました</h3>
+                    <p className="text-sm leading-relaxed">
+                      画像URLの期限切れや削除の可能性があります。再生成してください。
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageLoadError(false)
+                        setCurrentStep(2)
+                      }}
+                      className="mt-3 inline-flex items-center gap-2 h-10 px-4 rounded-lg font-bold text-sm text-white
+                        bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500
+                        bg-[length:200%_200%] shadow-md
+                        transition-all duration-200
+                        hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
+                        focus:outline-none focus:ring-3 focus:ring-purple-500 focus:ring-offset-2
+                        animate-gradient-flow
+                      "
+                    >
+                      もう一度生成する
+                    </button>
+                  </div>
+                </div>
+              )}
               <figure className="bg-gradient-to-br from-base-200 to-base-100 p-6 sm:p-8 rounded-xl mb-6">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img 
-                  src={state.imageDataUrl} 
-                  alt="生成されたくぅー画像" 
-                  className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
-                />
+                {state.imageUrl.startsWith('http') ? (
+                  <Image
+                    src={state.imageUrl}
+                    alt="生成されたくぅー画像"
+                    width={state.width}
+                    height={state.height}
+                    className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
+                    onError={() => setImageLoadError(true)}
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={state.imageUrl}
+                    alt="生成されたくぅー画像"
+                    className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
+                    onError={() => setImageLoadError(true)}
+                  />
+                )}
               </figure>
               <SaveActions
-                imageDataUrl={state.imageDataUrl}
+                imageUrl={state.imageUrl}
                 mimeType={state.mimeType}
                 width={state.width}
                 height={state.height}

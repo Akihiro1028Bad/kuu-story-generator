@@ -9,7 +9,6 @@ services:
       # Inside docker network the Prism mock is reachable via service name.
       - NEXT_PUBLIC_API_URL=http://prism:4010
       - NEXT_TELEMETRY_DISABLED=1
-      - NODE_ENV=development
       # macOS/Windows Docker Desktop ではファイル監視が不安定なことがあるため（必要に応じて無効化可）
       - WATCHPACK_POLLING=true
     volumes:

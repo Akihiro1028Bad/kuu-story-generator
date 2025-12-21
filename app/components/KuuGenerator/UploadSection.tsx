@@ -1,54 +1,101 @@
 'use client'
 
-import { useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { useState, useRef, ChangeEvent, DragEvent, useEffect } from 'react'
+import { upload } from '@vercel/blob/client'
 
 interface UploadSectionProps {
-  onImageSelected: (file: File | null) => void
+  onImageSelected: (url: string | null, localUrl?: string | null) => void
+  onUploadStateChange?: (isUploading: boolean) => void // アップロード状態を親に通知
   disabled?: boolean
+  resetTrigger?: number // リセットをトリガーする値（変更時にリセット実行）
 }
 
-export function UploadSection({ onImageSelected, disabled }: UploadSectionProps) {
+export function UploadSection({ onImageSelected, onUploadStateChange, disabled, resetTrigger }: UploadSectionProps) {
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const previewRef = useRef<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  const handleFileChange = (file: File | null) => {
+  const handleFileChange = async (file: File | null) => {
     setError(null)
+    setUploadProgress(0)
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
 
     if (!file) {
-      onImageSelected(null)
+      onImageSelected(null, null)
       setPreview(null)
       return
     }
 
     if (file.type !== 'image/jpeg' && file.type !== 'image/png') {
       setError('JPEGまたはPNG形式の画像を選択してください。')
-      onImageSelected(null)
+      onImageSelected(null, null)
       return
     }
 
     if (file.size > 10 * 1024 * 1024) {
       setError('画像サイズは10MB以下にしてください。')
-      onImageSelected(null)
+      onImageSelected(null, null)
       return
     }
 
-    const img = new Image()
+    // ✅ 即座にアップロード中フラグを立てる（アニメーションを即座に表示）
+    setIsUploading(true)
+    onUploadStateChange?.(true) // 親にアップロード開始を通知
+    setUploadProgress(0)
+    abortControllerRef.current = new AbortController()
+
+    // 以前のプレビューURLを解放（新しいプレビューに置き換えるため）
+    if (previewRef.current) {
+      URL.revokeObjectURL(previewRef.current)
+      previewRef.current = null
+    }
+
     const objectUrl = URL.createObjectURL(file)
+    previewRef.current = objectUrl
+    setPreview(objectUrl)
     
-    img.onload = () => {
-      onImageSelected(file)
-      setPreview(objectUrl)
+    // ローカルBlob URLを即座に親に通知（アップロード前でも即時表示可能にする）
+    onImageSelected(null, objectUrl)
+
+    try {
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+        abortSignal: abortControllerRef.current.signal,
+        onUploadProgress: ({ percentage }) => {
+          setUploadProgress(percentage)
+        },
+      })
+      // アップロード完了後、リモートURLとローカルURLの両方を通知
+      onImageSelected(blob.url, objectUrl)
+      setIsUploading(false)
+      onUploadStateChange?.(false) // 親にアップロード完了を通知
+      setUploadProgress(100)
+    } catch (uploadError) {
+      setIsUploading(false)
+      onUploadStateChange?.(false) // 親にアップロード失敗を通知
+      setUploadProgress(0)
+      if (uploadError instanceof Error && uploadError.name === 'BlobRequestAbortedError') {
+        setError('アップロードがキャンセルされました。')
+      } else {
+        setError('アップロードに失敗しました。再試行してください。')
+        console.error('Upload error:', uploadError)
+      }
+      onImageSelected(null, null)
+      setPreview(null)
+      if (previewRef.current) {
+        URL.revokeObjectURL(previewRef.current)
+        previewRef.current = null
+      }
     }
-    
-    img.onerror = () => {
-      setError('画像の読み込みに失敗しました。')
-      onImageSelected(null)
-      URL.revokeObjectURL(objectUrl)
-    }
-    
-    img.src = objectUrl
   }
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -91,16 +138,45 @@ export function UploadSection({ onImageSelected, disabled }: UploadSectionProps)
   }
 
   const clearPreview = () => {
-    if (preview) {
-      URL.revokeObjectURL(preview)
+    if (previewRef.current) {
+      URL.revokeObjectURL(previewRef.current)
+      previewRef.current = null
     }
     setPreview(null)
     setDimensions(null)
-    onImageSelected(null)
+    onImageSelected(null, null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
+
+  // リセットトリガーが変更された時にプレビューをクリア
+  useEffect(() => {
+    if (resetTrigger !== undefined && resetTrigger > 0) {
+      // アップロード中の場合は中断
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      setIsUploading(false)
+      onUploadStateChange?.(false) // 親にアップロード中断を通知
+      clearPreview()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetTrigger]) // clearPreviewとonImageSelectedは安定しているため、依存配列から除外
+
+  useEffect(() => {
+    return () => {
+      // アンマウント時のみ、進行中アップロードを中断
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      // アンマウント時にプレビューURLを解放
+      if (previewRef.current) {
+        URL.revokeObjectURL(previewRef.current)
+        previewRef.current = null
+      }
+    }
+  }, [])
 
   return (
     <div className="space-y-5">
@@ -158,7 +234,7 @@ export function UploadSection({ onImageSelected, disabled }: UploadSectionProps)
                 clearPreview()
               }}
               className="absolute -top-3 -right-3 w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 text-white shadow-xl hover:scale-110 hover:shadow-2xl active:scale-95 transition-all duration-200 flex items-center justify-center focus:outline-none focus:ring-3 focus:ring-pink-500 focus:ring-offset-2 z-10"
-              disabled={disabled}
+              disabled={disabled || isUploading}
               aria-label="画像を削除"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -180,6 +256,29 @@ export function UploadSection({ onImageSelected, disabled }: UploadSectionProps)
         )}
       </div>
 
+      {/* アップロード中のトースト通知UI */}
+      {isUploading && (
+        <div className="fixed top-4 right-4 bg-white rounded-lg shadow-2xl p-4 min-w-[300px] z-50 animate-fade-in border-2 border-purple-500">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin">
+              <svg className="w-6 h-6 text-purple-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-sm">アップロード中... {Math.round(uploadProgress)}%</p>
+              <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                <div
+                  className="bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="alert alert-warning shadow-lg border-2 border-warning/30 rounded-xl" role="alert">
           <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -200,4 +299,3 @@ export function UploadSection({ onImageSelected, disabled }: UploadSectionProps)
     </div>
   )
 }
-

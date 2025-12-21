@@ -2,7 +2,8 @@ export interface StylePreset {
   id: string
   label: string
   description: string
-  promptHint: string
+  // buildPrompt 側では optional として扱っているため、型もそれに合わせる
+  promptHint?: string
   category?: string
 }
 

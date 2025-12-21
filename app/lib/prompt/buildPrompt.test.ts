@@ -64,4 +64,22 @@ describe('buildPrompt', () => {
       '【スタイル】オシャレで遊び心があり、写真のシチュレーションに合うスタイルで追加で次の要素を取り入れる: ヒント1、ヒント2、ヒント3、ヒント4、ヒント5、ヒント6、ヒント7、ヒント8、ヒント9、ヒント10、ほか'
     )
   })
+
+  it('UT-034: 正常系 - 重複ヒントを除外して連結する', () => {
+    const styles: StylePreset[] = [
+      { id: 's1', label: 's1', description: 'd', promptHint: '重複', category: 'other' },
+      { id: 's2', label: 's2', description: 'd', promptHint: '重複', category: 'other' },
+      { id: 's3', label: 's3', description: 'd', promptHint: '別のヒント', category: 'other' },
+    ]
+    const prompt = buildPrompt(mockTextPhrase, styles, mockPosition)
+    expect(prompt).toContain('重複、別のヒント')
+  })
+
+  it('UT-035: 正常系 - promptHintが空の場合は空文字になる', () => {
+    const styles: StylePreset[] = [
+      { id: 's1', label: 's1', description: 'd', promptHint: undefined, category: 'other' },
+    ]
+    const prompt = buildPrompt(mockTextPhrase, styles, mockPosition)
+    expect(prompt).toContain('【スタイル】オシャレで遊び心があり、写真のシチュレーションに合うスタイルで追加で次の要素を取り入れる: ')
+  })
 })

@@ -8,7 +8,14 @@ const nextConfig: NextConfig = {
     // 画像アップロード等で Server Actions のリクエスト本文が 1MB を超えるため引き上げ
     serverActions: { bodySizeLimit: '50mb' },
   } as unknown as NextConfig['experimental'],
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.public.blob.vercel-storage.com',
+      },
+    ],
+  },
 }
 
 export default nextConfig
-

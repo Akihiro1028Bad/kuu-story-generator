@@ -7,7 +7,14 @@ import next from '@next/eslint-plugin-next'
 
 export default [
   {
-    ignores: ['node_modules/**', '.next/**', 'dist/**', 'coverage/**'],
+    ignores: [
+      'node_modules/**',
+      '.next/**',
+      'dist/**',
+      'build/**',
+      'coverage/**',
+      '**/*.min.js',
+    ],
   },
 
   // Base JS rules
@@ -58,5 +65,4 @@ export default [
     },
   },
 ]
-
 

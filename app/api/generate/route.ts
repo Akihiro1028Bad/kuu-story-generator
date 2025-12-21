@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenAI } from '@google/genai'
+import { put, del } from '@vercel/blob'
 import { buildPrompt } from '@/app/lib/prompt/buildPrompt'
 import { textPhraseOptions } from '@/app/lib/presets/textPhraseOptions'
 import { stylePresets } from '@/app/lib/presets/stylePresets'
@@ -7,6 +8,9 @@ import { positionPresets } from '@/app/lib/presets/positionPresets'
 import { validateSelections } from '@/app/lib/validate/validateSelections'
 
 export const runtime = 'nodejs'
+
+const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024
+const ALLOWED_BLOB_HOST_SUFFIX = '.public.blob.vercel-storage.com'
 
 function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms))
@@ -80,6 +84,16 @@ function toDebugJson(error: unknown) {
   }
 }
 
+function isAllowedBlobHost(urlString: string): boolean {
+  try {
+    const url = new URL(urlString)
+    if (url.protocol !== 'https:') return false
+    return url.hostname.endsWith(ALLOWED_BLOB_HOST_SUFFIX)
+  } catch {
+    return false
+  }
+}
+
 type GeminiInlineData = {
   mimeType?: string
   data?: string
@@ -137,7 +151,7 @@ export async function POST(request: NextRequest) {
     log('info', 'FormData parsed', { elapsed: Date.now() - formDataStartTime })
     
     // 1. 入力取得
-    const image = formData.get('image') as File
+    const imageUrl = formData.get('imageUrl') as string
     const textPhraseId = formData.get('textPhraseId') as string
     const textPhraseCustom = (formData.get('textPhraseCustom') as string | null)?.trim() ?? ''
     const styleIdsStr = formData.get('styleIds') as string
@@ -150,10 +164,8 @@ export async function POST(request: NextRequest) {
     const styleIds = styleIdsStr ? styleIdsStr.split(',').filter(id => id.trim()) : []
 
     log('info', 'Request parameters extracted', {
-      hasImage: !!image,
-      imageName: image?.name,
-      imageSize: image?.size,
-      imageType: image?.type,
+      hasImageUrl: !!imageUrl,
+      imageUrl: imageUrl?.substring(0, 100),
       textPhraseId,
       hasTextPhraseCustom: Boolean(textPhraseCustom),
       styleIds: styleIds.length > 0 ? styleIds : undefined,
@@ -165,9 +177,9 @@ export async function POST(request: NextRequest) {
     })
     
     // 2. バリデーション
-    if (!image || (!textPhraseId && !textPhraseCustom) || styleIds.length === 0 || !positionId) {
+    if (!imageUrl || (!textPhraseId && !textPhraseCustom) || styleIds.length === 0 || !positionId) {
       log('warn', 'Validation failed: missing required fields', {
-        hasImage: !!image,
+        hasImageUrl: !!imageUrl,
         hasTextPhraseId: !!textPhraseId,
         hasTextPhraseCustom: Boolean(textPhraseCustom),
         styleIdsCount: styleIds.length,
@@ -175,6 +187,16 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json(
         { error: '必須項目が不足しています' },
+        { status: 400 }
+      )
+    }
+
+    if (!isAllowedBlobHost(imageUrl)) {
+      log('warn', 'Validation failed: imageUrl host not allowed', {
+        imageUrl: imageUrl?.substring(0, 100),
+      })
+      return NextResponse.json(
+        { error: '許可されていない画像URLです' },
         { status: 400 }
       )
     }
@@ -258,14 +280,35 @@ export async function POST(request: NextRequest) {
     
     // 4. 画像をbase64に変換（Geminiに送るため）
     const imageConversionStartTime = Date.now()
-    const imageBuffer = await image.arrayBuffer()
-    const imageBase64 = Buffer.from(imageBuffer).toString('base64')
-    log('info', 'Image converted to base64', {
-      imageSize: image.size,
-      imageType: image.type,
-      base64Length: imageBase64.length,
-      elapsed: Date.now() - imageConversionStartTime,
-    })
+    let imageArrayBuffer: ArrayBuffer
+    let imageBase64: string
+    let imageMimeType: string
+    try {
+      const imageResponse = await fetch(imageUrl)
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`)
+      }
+      imageArrayBuffer = await imageResponse.arrayBuffer()
+      const imageBuffer = Buffer.from(imageArrayBuffer)
+      imageBase64 = imageBuffer.toString('base64')
+      imageMimeType = imageResponse.headers.get('content-type') || 'image/png'
+      log('info', 'Image downloaded and converted to base64', {
+        imageUrl: imageUrl.substring(0, 100),
+        imageSize: imageArrayBuffer.byteLength,
+        imageType: imageMimeType,
+        base64Length: imageBase64.length,
+        elapsed: Date.now() - imageConversionStartTime,
+      })
+    } catch (downloadError) {
+      log('warn', 'Failed to download image from URL', {
+        imageUrl: imageUrl.substring(0, 100),
+        error: downloadError instanceof Error ? downloadError.message : String(downloadError),
+      })
+      return NextResponse.json(
+        { error: '画像の取得に失敗しました。再試行してください。' },
+        { status: 400 }
+      )
+    }
 
     // 5. Gemini（Nano Banana）呼び出し
     const ai = new GoogleGenAI({ apiKey })
@@ -274,8 +317,8 @@ export async function POST(request: NextRequest) {
     log('info', 'Starting Gemini API call', {
       model,
       promptLength: prompt.length,
-      imageSize: image.size,
-      imageType: image.type,
+      imageSize: imageArrayBuffer.byteLength,
+      imageType: imageMimeType,
     })
 
     const geminiStartTime = Date.now()
@@ -296,7 +339,7 @@ export async function POST(request: NextRequest) {
                   { text: prompt },
                   {
                     inlineData: {
-                      mimeType: image.type || 'image/png',
+                      mimeType: imageMimeType,
                       data: imageBase64,
                     },
                   },
@@ -344,7 +387,26 @@ export async function POST(request: NextRequest) {
       throw new Error('No image returned from Gemini API')
     }
 
-    const outDataUrl = `data:${outMime};base64,${outBase64}`
+    const generatedImageBuffer = Buffer.from(outBase64, 'base64')
+    if (generatedImageBuffer.length > MAX_GENERATED_IMAGE_BYTES) {
+      log('warn', 'Generated image too large', {
+        size: generatedImageBuffer.length,
+        max: MAX_GENERATED_IMAGE_BYTES,
+      })
+      return NextResponse.json(
+        { error: '生成結果が大きすぎます。別の画像で再試行してください。' },
+        { status: 413 }
+      )
+    }
+
+    const timestamp = Date.now()
+    const extension = outMime === 'image/png' ? 'png' : 'jpg'
+    const filename = `generated/kuu-${timestamp}.${extension}`
+    const blob = await put(filename, generatedImageBuffer, {
+      access: 'public',
+      addRandomSuffix: true,
+      contentType: outMime,
+    })
 
     // 6. 返却（Geminiのレスポンスにwidth/heightが無い場合があるため、元画像サイズを優先して返す）
     const originalWidth = Number.parseInt(originalWidthStr ?? '', 10)
@@ -354,7 +416,7 @@ export async function POST(request: NextRequest) {
 
     const responseData = {
       model,
-      imageDataUrl: outDataUrl,
+      imageUrl: blob.url,
       mimeType: outMime,
       width: finalWidth,
       height: finalHeight,
@@ -364,12 +426,24 @@ export async function POST(request: NextRequest) {
     log('info', 'Sending success response', {
       status: 200,
       responseSize: JSON.stringify(responseData).length,
-      imageDataUrlLength: outDataUrl.length,
+      imageUrl: blob.url.substring(0, 100),
       mimeType: outMime,
       width: finalWidth,
       height: finalHeight,
       totalElapsed,
     })
+
+    try {
+      await del(imageUrl)
+      log('info', 'Original image deleted', {
+        url: imageUrl.substring(0, 100),
+      })
+    } catch (deleteError) {
+      log('warn', 'Failed to delete original image', {
+        url: imageUrl.substring(0, 100),
+        error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+      })
+    }
 
     return NextResponse.json(responseData)
   } catch (error) {
