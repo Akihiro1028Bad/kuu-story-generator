@@ -1,0 +1,219 @@
+openapi: 3.0.3
+info:
+  title: ストレージベースのアップロード・URLベースのアーキテクチャ API
+  description: |
+    画像アップロードと生成結果の保存をストレージベースのアーキテクチャに移行するAPI。
+    クライアント側でVercel Blobに直接アップロードし、Server ActionとBFF APIはURLのみを受け取り、生成結果もURLとして返す。
+  version: 1.0.0
+  contact:
+    name: kuu-story-generator
+
+servers:
+  - url: http://localhost:3000
+    description: ローカル開発環境
+  - url: https://your-domain.vercel.app
+    description: 本番環境
+
+paths:
+  /api/upload:
+    post:
+      summary: クライアントアップロード用トークン生成
+      description: |
+        Vercel Blobへのクライアントアップロード用トークンを生成する。
+        `handleUpload()`を使用してトークン生成とアップロード完了処理を実装する。
+      operationId: handleUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandleUploadBody'
+      responses:
+        '200':
+          description: トークン生成成功またはアップロード完了
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TokenResponse'
+                  - $ref: '#/components/schemas/UploadCompletedResponse'
+        '400':
+          description: リクエストエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/generate:
+    post:
+      summary: 画像生成
+      description: |
+        アップロードされた画像URLを使用して画像生成を実行する。
+        BFF API側で画像URLから画像をダウンロードし、base64に変換してGemini APIに送信する。
+        生成結果はVercel Blobに保存し、URLを返す。
+      operationId: generateImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - imageUrl
+                - textPhraseId
+                - styleIds
+                - positionId
+                - outputFormat
+              properties:
+                imageUrl:
+                  type: string
+                  format: uri
+                  description: アップロードされた画像のURL（Vercel Blobの公開URL）
+                  example: https://ce0rcu23vrrdzqap.public.blob.vercel-storage.com/uploads/test-123.jpg
+                textPhraseId:
+                  type: string
+                  description: テキストフレーズID
+                  example: phrase1
+                textPhraseCustom:
+                  type: string
+                  description: カスタムテキストフレーズ（textPhraseIdが指定されていない場合に使用）
+                  example: カスタムテキスト
+                styleIds:
+                  type: string
+                  description: スタイルIDのカンマ区切りリスト
+                  example: style1,style2
+                positionId:
+                  type: string
+                  description: 位置ID
+                  example: pos1
+                outputFormat:
+                  type: string
+                  enum: [png, jpeg]
+                  description: 出力形式
+                  example: jpeg
+                originalWidth:
+                  type: string
+                  description: 元画像の幅（ピクセル）
+                  example: '1920'
+                originalHeight:
+                  type: string
+                  description: 元画像の高さ（ピクセル）
+                  example: '1080'
+      responses:
+        '200':
+          description: 生成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    HandleUploadBody:
+      type: object
+      description: Vercel Blob handleUpload()のリクエストボディ
+      properties:
+        pathname:
+          type: string
+          description: アップロードするファイルのパス名
+          example: test.jpg
+        clientPayload:
+          type: string
+          description: クライアントから送信される追加データ（文字列）
+          example: '{"uploader":"user-123"}'
+
+    TokenResponse:
+      type: object
+      description: トークン生成レスポンス
+      properties:
+        type:
+          type: string
+          enum: [blob.generate-client-token]
+          description: レスポンスタイプ
+        clientToken:
+          type: string
+          description: クライアントアップロード用トークン
+        url:
+          type: string
+          format: uri
+          description: アップロード先URL
+        uploadUrl:
+          type: string
+          format: uri
+          description: アップロードURL
+
+    UploadCompletedResponse:
+      type: object
+      description: アップロード完了レスポンス
+      properties:
+        type:
+          type: string
+          enum: [blob.upload-completed]
+          description: レスポンスタイプ
+        response:
+          type: string
+          enum: [ok]
+          description: レスポンスステータス
+
+    GenerateResponse:
+      type: object
+      description: 生成レスポンス
+      required:
+        - imageUrl
+        - mimeType
+        - width
+        - height
+      properties:
+        model:
+          type: string
+          description: 使用したモデル名
+          example: gemini-3-pro-image-preview
+        imageDataUrl:
+          type: string
+          description: 互換期間中のみ返される data URL（非推奨）
+          example: data:image/png;base64,iVBORw0KGgoAAA...
+        imageUrl:
+          type: string
+          format: uri
+          description: 生成結果の画像URL（Vercel Blobの公開URL）
+          example: https://ce0rcu23vrrdzqap.public.blob.vercel-storage.com/generated/kuu-1234567890.jpg
+        mimeType:
+          type: string
+          enum: [image/png, image/jpeg]
+          description: MIMEタイプ
+          example: image/jpeg
+        width:
+          type: integer
+          description: 画像幅（ピクセル）
+          example: 1920
+        height:
+          type: integer
+          description: 画像高さ（ピクセル）
+          example: 1080
+
+    ErrorResponse:
+      type: object
+      description: エラーレスポンス
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: エラーメッセージ
+          example: 必須項目が不足しています
+        debug:
+          type: object
+          description: デバッグ情報（開発環境のみ）
+          additionalProperties: true

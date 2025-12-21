@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Image from 'next/image'
 import { generateKuu, type GenerateState } from './actions'
 import { UploadSection } from './UploadSection'
 import { StyleSection } from './StyleSection'
@@ -23,7 +24,7 @@ type Step = 1 | 2 | 3
 export function KuuGenerator() {
   const [state, formAction, pending] = useActionState(generateKuu, initialState)
   const [currentStep, setCurrentStep] = useState<Step>(1)
-  const [uploadedImage, setUploadedImage] = useState<File | null>(null)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [options, setOptions] = useState<OptionsData | null>(null)
   const [outputFormat] = useState<'jpeg' | 'png'>('jpeg')
@@ -35,6 +36,7 @@ export function KuuGenerator() {
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [showGenerateErrorModal, setShowGenerateErrorModal] = useState(false)
   const [generateErrorMessage, setGenerateErrorMessage] = useState<string>('')
+  const [imageLoadError, setImageLoadError] = useState(false)
   const searchParams = useSearchParams()
   const allowCustomText = searchParams.get('tsutsu') === '1'
 
@@ -83,6 +85,7 @@ export function KuuGenerator() {
     // そのため state 全体の更新に追従して遷移する。
     if (state.status === 'success') {
       setCurrentStep(3)
+      setImageLoadError(false)
     }
   }, [state])
 
@@ -102,14 +105,14 @@ export function KuuGenerator() {
 
 
   // 画像選択時の処理
-  const handleImageSelected = (file: File | null, preview: string | null) => {
-    setUploadedImage(file)
-    setImagePreview(preview)
+  const handleImageSelected = (url: string | null) => {
+    setUploadedImageUrl(url)
+    setImagePreview(url)
   }
 
   // ステップ1から2へ進む
   const handleNextToStep2 = () => {
-    if (uploadedImage) {
+    if (uploadedImageUrl) {
       setCurrentStep(2)
     }
   }
@@ -122,8 +125,8 @@ export function KuuGenerator() {
   // ステップ2から3へ進む（生成実行）
   const handleGenerate = async (formData: FormData) => {
     // フォームデータに選択値を設定（隠しフィールドから読み取るか、状態から設定）
-    if (uploadedImage) {
-      formData.set('image', uploadedImage)
+    if (uploadedImageUrl) {
+      formData.set('imageUrl', uploadedImageUrl)
     }
     // フォームから送信された値を使用（隠しフィールドから）
     let textPhraseId = (formData.get('textPhraseId') as string) || selectedText
@@ -185,7 +188,7 @@ export function KuuGenerator() {
   // 最初からやり直す
   const handleReset = () => {
     setCurrentStep(1)
-    setUploadedImage(null)
+    setUploadedImageUrl(null)
     setImagePreview(null)
     setSelectedText('')
     setTextPhraseCustom('')
@@ -198,8 +201,8 @@ export function KuuGenerator() {
     const step1Active = currentStep === 1
     const step2Active = currentStep === 2
     const step3Active = currentStep === 3
-    const step1Completed = uploadedImage && !step1Active
-    const step2Completed = (step3Active || (uploadedImage && selectedText && selectedStyles.length > 0 && selectedPosition)) && !step2Active
+    const step1Completed = uploadedImageUrl && !step1Active
+    const step2Completed = (step3Active || (uploadedImageUrl && selectedText && selectedStyles.length > 0 && selectedPosition)) && !step2Active
 
     const CheckIcon = ({ className }: { className?: string }) => (
       <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -338,21 +341,14 @@ export function KuuGenerator() {
                 <span>画像を選ぶ</span>
               </h2>
               <UploadSection
-                onImageSelected={(file) => {
-                  if (file) {
-                    const objectUrl = URL.createObjectURL(file)
-                    handleImageSelected(file, objectUrl)
-                  } else {
-                    handleImageSelected(null, null)
-                  }
-                }}
+                onImageSelected={handleImageSelected}
                 disabled={pending}
               />
               <div className="mt-8 flex justify-end">
                 <button
                   type="button"
                   onClick={handleNextToStep2}
-                  disabled={!uploadedImage || pending}
+                  disabled={!uploadedImageUrl || pending}
                   className="h-16 px-10 rounded-xl font-bold text-lg text-white
                     bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500
                     bg-[length:200%_200%] shadow-lg
@@ -414,6 +410,7 @@ export function KuuGenerator() {
               )}
               <form action={handleGenerate} noValidate>
                 <input type="hidden" name="outputFormat" value={outputFormat} />
+                <input type="hidden" name="imageUrl" value={uploadedImageUrl ?? ''} />
                 <input type="hidden" name="textPhraseId" value={selectedText} />
                 <input type="hidden" name="textPhraseCustom" value={textPhraseCustom} />
                 <input type="hidden" name="styleIds" value={selectedStyles.join(',')} />
@@ -538,16 +535,55 @@ export function KuuGenerator() {
               <h2 className="card-title text-2xl font-bold text-base-content justify-center mb-6">
                 ✨ クゥーが誕生しました！
               </h2>
+              {imageLoadError && (
+                <div className="mb-6 alert alert-error shadow-xl rounded-xl border-2 border-error/30" role="alert" aria-live="polite">
+                  <div>
+                    <h3 className="font-bold text-base mb-1">画像の表示に失敗しました</h3>
+                    <p className="text-sm leading-relaxed">
+                      画像URLの期限切れや削除の可能性があります。再生成してください。
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageLoadError(false)
+                        setCurrentStep(2)
+                      }}
+                      className="mt-3 inline-flex items-center gap-2 h-10 px-4 rounded-lg font-bold text-sm text-white
+                        bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500
+                        bg-[length:200%_200%] shadow-md
+                        transition-all duration-200
+                        hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]
+                        focus:outline-none focus:ring-3 focus:ring-purple-500 focus:ring-offset-2
+                        animate-gradient-flow
+                      "
+                    >
+                      もう一度生成する
+                    </button>
+                  </div>
+                </div>
+              )}
               <figure className="bg-gradient-to-br from-base-200 to-base-100 p-6 sm:p-8 rounded-xl mb-6">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img 
-                  src={state.imageDataUrl} 
-                  alt="生成されたくぅー画像" 
-                  className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
-                />
+                {state.imageUrl.startsWith('http') ? (
+                  <Image
+                    src={state.imageUrl}
+                    alt="生成されたくぅー画像"
+                    width={state.width}
+                    height={state.height}
+                    className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
+                    onError={() => setImageLoadError(true)}
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={state.imageUrl}
+                    alt="生成されたくぅー画像"
+                    className="rounded-xl shadow-xl max-w-full h-auto mx-auto transition-transform duration-300 hover:scale-[1.02]"
+                    onError={() => setImageLoadError(true)}
+                  />
+                )}
               </figure>
               <SaveActions
-                imageDataUrl={state.imageDataUrl}
+                imageUrl={state.imageUrl}
                 mimeType={state.mimeType}
                 width={state.width}
                 height={state.height}

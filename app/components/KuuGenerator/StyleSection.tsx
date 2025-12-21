@@ -245,7 +245,9 @@ export function StyleSection({
             type="text"
             placeholder="🔍 検索..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            // happy-dom/vitest 環境では onChange が発火しないケースがあるため、
+            // onInput を使用して確実に検索クエリを更新する
+            onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
             className="input input-bordered w-full"
             disabled={disabled}
           />

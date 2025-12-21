@@ -3,13 +3,17 @@ export type MobileSaveResult =
   | { outcome: 'fallback-downloaded'; message: string }
   | { outcome: 'failed'; message: string }
 
-export async function saveOnMobile(imageDataUrl: string): Promise<MobileSaveResult> {
+export async function saveOnMobile(imageUrl: string): Promise<MobileSaveResult> {
   try {
+    const response = await fetch(imageUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`)
+    }
+    const blob = await response.blob()
+
     // 方法1: Web Share API (Level 2)
     // ファイル共有がサポートされているか確認
     if (navigator.share && navigator.canShare) {
-      const response = await fetch(imageDataUrl)
-      const blob = await response.blob()
       const file = new File([blob], `kuu-${Date.now()}.jpg`, { type: 'image/jpeg' })
       
       if (navigator.canShare({ files: [file] })) {
@@ -30,12 +34,14 @@ export async function saveOnMobile(imageDataUrl: string): Promise<MobileSaveResu
     }
     
     // 方法2: 通常のダウンロードにフォールバック
+    const objectUrl = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = imageDataUrl
+    link.href = objectUrl
     link.download = `kuu-${Date.now()}.jpg`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
     
     return {
       outcome: 'fallback-downloaded',
@@ -45,4 +51,3 @@ export async function saveOnMobile(imageDataUrl: string): Promise<MobileSaveResu
     return { outcome: 'failed', message: error instanceof Error ? error.message : '保存に失敗しました' }
   }
 }
-

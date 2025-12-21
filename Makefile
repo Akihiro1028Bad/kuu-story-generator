@@ -37,7 +37,7 @@ install: ## 依存解決（コンテナ内 / lockは固定）
 
 .PHONY: build
 build: ## Next.js build（コンテナ内）
-	@$(DC) run --rm web pnpm build
+	@$(DC) run --rm -e NODE_ENV=production web pnpm build
 
 .PHONY: lint
 lint: ## ESLint（コンテナ内）

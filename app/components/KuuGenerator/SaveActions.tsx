@@ -6,20 +6,20 @@ import { saveOnDesktop } from '@/app/lib/save/saveOnDesktop'
 import { saveOnMobile } from '@/app/lib/save/saveOnMobile'
 
 interface SaveActionsProps {
-  imageDataUrl: string
+  imageUrl: string
   mimeType: string
   width: number
   height: number
 }
 
-export function SaveActions({ imageDataUrl, mimeType }: SaveActionsProps) {
+export function SaveActions({ imageUrl, mimeType }: SaveActionsProps) {
   const [device] = useState<'desktop' | 'mobile'>(() => detectDeviceClass())
 
   const handleSave = async () => {
     if (device === 'desktop') {
-      saveOnDesktop(imageDataUrl, mimeType as 'image/png' | 'image/jpeg')
+      await saveOnDesktop(imageUrl, mimeType as 'image/png' | 'image/jpeg')
     } else {
-      await saveOnMobile(imageDataUrl)
+      await saveOnMobile(imageUrl)
     }
   }
 
@@ -51,10 +51,9 @@ export function SaveActions({ imageDataUrl, mimeType }: SaveActionsProps) {
         </button>
         
         <p className="text-xs sm:text-sm text-base-content/60 mt-3 leading-relaxed">
-          ※ 画像はサーバーに保存されません。必ず保存してください。
+          ※ 画像はURLで一定期間取得できます。必要に応じて保存してください。
         </p>
       </div>
     </div>
   )
 }
-

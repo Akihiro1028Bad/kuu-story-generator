@@ -1,12 +1,18 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { saveOnDesktop } from './saveOnDesktop'
 
 describe('saveOnDesktop', () => {
-  it('UT-013: 正常系 - PCでのPNGダウンロード', () => {
-// ... existing tests ...
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    global.fetch = vi.fn()
+    global.URL.createObjectURL = vi.fn(() => 'blob:download') as typeof URL.createObjectURL
+    global.URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
+  })
+
+  it('UT-023: URLから画像を取得してダウンロードできる（正常系）', async () => {
     const linkMock = {
       href: '',
       download: '',
@@ -17,10 +23,16 @@ describe('saveOnDesktop', () => {
     const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation(() => linkMock)
     const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation(() => linkMock)
 
-    saveOnDesktop('data:image/png;base64,test', 'image/png')
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['test'], { type: 'image/png' })),
+    } as unknown as Response)
+
+    await saveOnDesktop('https://example.com/image.png', 'image/png')
 
     expect(createElementSpy).toHaveBeenCalledWith('a')
-    expect(linkMock.href).toBe('data:image/png;base64,test')
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com/image.png')
+    expect(linkMock.href).toBe('blob:download')
     expect(linkMock.download).toMatch(/kuu-\d+\.png/)
     expect(appendChildSpy).toHaveBeenCalled()
     expect(linkMock.click).toHaveBeenCalled()
@@ -29,21 +41,14 @@ describe('saveOnDesktop', () => {
     vi.restoreAllMocks()
   })
 
-  it('UT-014: 正常系 - PCでのJPEGダウンロード', () => {
-    const linkMock = {
-      href: '',
-      download: '',
-      click: vi.fn(),
-    } as unknown as HTMLAnchorElement
+  it('UT-024: 画像取得失敗時にエラーをスローする（異常系）', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      statusText: 'Not Found',
+    } as unknown as Response)
 
-    vi.spyOn(document, 'createElement').mockReturnValue(linkMock)
-    vi.spyOn(document.body, 'appendChild').mockImplementation(() => linkMock)
-    vi.spyOn(document.body, 'removeChild').mockImplementation(() => linkMock)
-
-    saveOnDesktop('data:image/jpeg;base64,test', 'image/jpeg')
-
-    expect(linkMock.download).toMatch(/kuu-\d+\.jpg/)
-    
-    vi.restoreAllMocks()
+    await expect(saveOnDesktop('https://example.com/invalid.jpg', 'image/jpeg')).rejects.toThrow(
+      /Failed to fetch image/
+    )
   })
 })

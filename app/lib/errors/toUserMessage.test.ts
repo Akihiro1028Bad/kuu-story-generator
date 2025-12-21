@@ -11,5 +11,12 @@ describe('toUserMessage', () => {
     const error = new Error('Unknown error')
     expect(toUserMessage(error)).toBe('予期しないエラーが発生しました。しばらくしてから再試行してください。')
   })
-})
 
+  it('UT-033: 正常系 - 文字列はそのまま返す', () => {
+    expect(toUserMessage('custom message')).toBe('custom message')
+  })
+
+  it('UT-034: 正常系 - Error以外は汎用メッセージに変換', () => {
+    expect(toUserMessage({})).toBe('予期しないエラーが発生しました。しばらくしてから再試行してください。')
+  })
+})

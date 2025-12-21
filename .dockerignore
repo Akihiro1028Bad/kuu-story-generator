@@ -6,6 +6,8 @@ node_modules
 dist
 coverage
 *.log
+Dockerfile*
+.dockerignore
 .DS_Store
 
 .git
@@ -14,5 +16,4 @@ coverage
 # Local env files (never bake into image)
 .env
 .env.*
-
 

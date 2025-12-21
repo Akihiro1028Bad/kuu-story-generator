@@ -5,7 +5,14 @@ import { toUserMessage } from '@/app/lib/errors/toUserMessage'
 export type GenerateState =
   | { status: 'idle' }
   | { status: 'error'; message: string }
-  | { status: 'success'; imageDataUrl: string; mimeType: string; width: number; height: number }
+  | {
+      status: 'success'
+      imageUrl: string
+      imageDataUrl?: string
+      mimeType: string
+      width: number
+      height: number
+    }
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -28,7 +35,7 @@ export async function generateKuu(
 ): Promise<GenerateState> {
   try {
     // 1. FormDataから値を取得
-    const image = formData.get('image') as File
+    const imageUrl = formData.get('imageUrl') as string
     const textPhraseId = formData.get('textPhraseId') as string
     const textPhraseCustom = (formData.get('textPhraseCustom') as string | null)?.trim() ?? ''
     const styleIdsStr = formData.get('styleIds') as string
@@ -39,10 +46,22 @@ export async function generateKuu(
     const styleIds = styleIdsStr ? styleIdsStr.split(',').filter(id => id.trim()) : []
     
     // 2. 簡易バリデーション
-    if (!image || (!textPhraseId && !textPhraseCustom) || styleIds.length === 0 || !positionId) {
+    if (!imageUrl || (!textPhraseId && !textPhraseCustom) || styleIds.length === 0 || !positionId) {
       return {
         status: 'error',
         message: '必須項目が不足しています。画像とすべての選択肢を選んでください。',
+      }
+    }
+
+    try {
+      const url = new URL(imageUrl)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error('invalid protocol')
+      }
+    } catch {
+      return {
+        status: 'error',
+        message: '無効な画像URLです。',
       }
     }
 
@@ -56,17 +75,25 @@ export async function generateKuu(
       const delayMs = Number(process.env.KUU_MOCK_DELAY_MS ?? '10000')
       if (!Number.isNaN(delayMs) && delayMs > 0) await sleep(delayMs)
 
-      // モック結果: アップロード画像をそのまま返す（外部API不要・UI確認には十分）
-      const buf = Buffer.from(await image.arrayBuffer())
-      const imageDataUrl = `data:${image.type};base64,${buf.toString('base64')}`
+      const response = await fetch(imageUrl)
+      if (!response.ok) {
+        return {
+          status: 'error',
+          message: '画像の取得に失敗しました。しばらくしてから再試行してください。',
+        }
+      }
+      const mimeType = response.headers.get('content-type') || `image/${outputFormat}`
+      const buf = Buffer.from(await response.arrayBuffer())
+      const imageDataUrl = `data:${mimeType};base64,${buf.toString('base64')}`
 
       const ow = Number(formData.get('originalWidth') ?? '')
       const oh = Number(formData.get('originalHeight') ?? '')
 
       return {
         status: 'success',
+        imageUrl,
         imageDataUrl,
-        mimeType: image.type || `image/${outputFormat}`,
+        mimeType,
         width: Number.isFinite(ow) && ow > 0 ? ow : 1024,
         height: Number.isFinite(oh) && oh > 0 ? oh : 1024,
       }
@@ -87,7 +114,7 @@ export async function generateKuu(
 
     // BFF APIにFormDataを送信
     const formDataForAPI = new FormData()
-    formDataForAPI.append('image', image)
+    formDataForAPI.append('imageUrl', imageUrl)
     formDataForAPI.append('textPhraseId', textPhraseId)
     if (textPhraseCustom) formDataForAPI.append('textPhraseCustom', textPhraseCustom)
     formDataForAPI.append('styleIds', styleIds.join(','))
@@ -130,8 +157,16 @@ export async function generateKuu(
     }
 
     const result = await response.json()
+    const resolvedImageUrl = result.imageUrl ?? result.imageDataUrl
+    if (!resolvedImageUrl) {
+      return {
+        status: 'error',
+        message: '生成結果の画像URLを取得できませんでした。再試行してください。',
+      }
+    }
     return {
       status: 'success',
+      imageUrl: resolvedImageUrl,
       imageDataUrl: result.imageDataUrl,
       mimeType: result.mimeType,
       width: result.width,
