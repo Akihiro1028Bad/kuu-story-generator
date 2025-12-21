@@ -313,7 +313,9 @@ describe('generateKuu', () => {
 
   it('UT-037: 実APIでエラーレスポンスのdebugを含める', async () => {
     process.env.KUU_USE_REAL_API = '1'
-    process.env.NODE_ENV = 'development'
+    // @types/node の定義差分等で NODE_ENV が readonly 扱いになる環境があるため、
+    // 代入ではなく process.env を差し替えて設定する（type-check 安定化）
+    process.env = { ...process.env, NODE_ENV: 'development' }
     headersMock.mockResolvedValue(new Headers({ host: 'localhost:3000', 'x-forwarded-proto': 'http' }))
 
     const formData = new FormData()

@@ -569,7 +569,8 @@ describe('UploadSection', () => {
     await act(async () => {
       const dropEvent = new DragEvent('drop', { bubbles: true, cancelable: true })
       const dataTransfer = {
-        files: [] as FileList,
+        // FileList は配列互換ではないため、最低限の形（length/item）を満たすモックを渡す
+        files: ({ length: 0, item: () => null } as unknown as FileList),
       }
       Object.defineProperty(dropEvent, 'dataTransfer', {
         value: dataTransfer,
