@@ -41,6 +41,7 @@ export async function generateKuu(
     const styleIdsStr = formData.get('styleIds') as string
     const positionId = formData.get('positionId') as string
     const outputFormat = formData.get('outputFormat') as 'png' | 'jpeg'
+    const mode = (formData.get('mode') as 'text' | 'stamp') || 'text'
     
     // 複数選択されたスタイルIDを配列に変換
     const styleIds = styleIdsStr ? styleIdsStr.split(',').filter(id => id.trim()) : []
@@ -120,6 +121,7 @@ export async function generateKuu(
     formDataForAPI.append('styleIds', styleIds.join(','))
     formDataForAPI.append('positionId', positionId)
     formDataForAPI.append('outputFormat', outputFormat)
+    formDataForAPI.append('mode', mode)
     
     const originalWidth = formData.get('originalWidth')
     const originalHeight = formData.get('originalHeight')

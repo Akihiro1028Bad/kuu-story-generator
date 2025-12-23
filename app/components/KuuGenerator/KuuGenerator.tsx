@@ -41,6 +41,7 @@ export function KuuGenerator({ initialSelections }: KuuGeneratorProps = {}) {
   const [textPhraseCustom, setTextPhraseCustom] = useState<string>('')
   const [selectedStyles, setSelectedStyles] = useState<string[]>(initialSelections?.styles ?? [])
   const [selectedPosition, setSelectedPosition] = useState<string>(initialSelections?.position ?? '')
+  const [selectedMode, setSelectedMode] = useState<'text' | 'stamp'>('text')
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [showGenerateErrorModal, setShowGenerateErrorModal] = useState(false)
@@ -281,6 +282,7 @@ export function KuuGenerator({ initialSelections }: KuuGeneratorProps = {}) {
     setTextPhraseCustom('')
     setSelectedStyles([])
     setSelectedPosition('')
+    setSelectedMode('text')
   }
 
   // ステップインジケーターの表示（バウンス・カーニバルデザイン）
@@ -511,6 +513,7 @@ export function KuuGenerator({ initialSelections }: KuuGeneratorProps = {}) {
                 <input type="hidden" name="textPhraseCustom" value={textPhraseCustom} />
                 <input type="hidden" name="styleIds" value={selectedStyles.join(',')} />
                 <input type="hidden" name="positionId" value={selectedPosition} />
+                <input type="hidden" name="mode" value={selectedMode} />
                 {options && options.textPhrases && options.styles && options.positions ? (
                   <StyleSection
                     options={options}
@@ -528,6 +531,52 @@ export function KuuGenerator({ initialSelections }: KuuGeneratorProps = {}) {
                 ) : (
                   <div className="text-center text-secondary animate-pulse py-10 text-lg font-medium">読み込み中... 🍬</div>
                 )}
+                
+                {/* 追加方法選択 */}
+                <div className="mt-8 form-control w-full">
+                  <label className="label pb-3">
+                    <span className="label-text font-bold text-lg text-base-content">追加方法を選択</span>
+                  </label>
+                  <div className="flex gap-4">
+                    <label
+                      className={`flex items-center gap-3 cursor-pointer flex-1 p-4 rounded-xl border-2 transition-all duration-200 ${
+                        selectedMode === 'text'
+                          ? 'border-primary bg-primary text-primary-content shadow-md shadow-primary/30 font-bold'
+                          : 'border-base-300 bg-base-100 text-base-content hover:border-primary/60 hover:bg-primary/5 hover:shadow-sm'
+                      } ${pending ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="mode"
+                        value="text"
+                        checked={selectedMode === 'text'}
+                        onChange={(e) => setSelectedMode(e.target.value as 'text' | 'stamp')}
+                        disabled={pending}
+                        className="radio radio-primary"
+                      />
+                      <span className="text-sm sm:text-base">文字を追加する</span>
+                    </label>
+                    <label
+                      className={`flex items-center gap-3 cursor-pointer flex-1 p-4 rounded-xl border-2 transition-all duration-200 ${
+                        selectedMode === 'stamp'
+                          ? 'border-primary bg-primary text-primary-content shadow-md shadow-primary/30 font-bold'
+                          : 'border-base-300 bg-base-100 text-base-content hover:border-primary/60 hover:bg-primary/5 hover:shadow-sm'
+                      } ${pending ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="mode"
+                        value="stamp"
+                        checked={selectedMode === 'stamp'}
+                        onChange={(e) => setSelectedMode(e.target.value as 'text' | 'stamp')}
+                        disabled={pending}
+                        className="radio radio-primary"
+                      />
+                      <span className="text-sm sm:text-base">スタンプを作成して追加する</span>
+                    </label>
+                  </div>
+                </div>
+                
                 <div className="mt-8 flex items-center justify-between gap-4">
                   <button
                     type="button"
