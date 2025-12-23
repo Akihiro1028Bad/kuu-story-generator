@@ -78,5 +78,8 @@ export const textPhraseOptions: TextPhraseOption[] = [
   { id: '58', label: 'クゥーすぎるよ', text: 'クゥーすぎるよ' },
   { id: '59', label: 'クゥーすぎるよ！', text: 'クゥーすぎるよ！' },
 
+  { id: '60', label: 'クゥーなる秩序', text: 'クゥーなる秩序' },
+  { id: '61', label: 'クゥーと過ごす日々', text: 'クゥーと過ごす日々' },
+  { id: '62', label: 'また君に〜クゥーしてる🎵', text: 'また君に〜クゥーしてる🎵' },
 ]
 
