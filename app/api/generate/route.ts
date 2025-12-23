@@ -157,6 +157,7 @@ export async function POST(request: NextRequest) {
     const styleIdsStr = formData.get('styleIds') as string
     const positionId = formData.get('positionId') as string
     const outputFormat = formData.get('outputFormat') as 'png' | 'jpeg'
+    const mode = (formData.get('mode') as 'text' | 'stamp') || 'text'
     const originalWidthStr = formData.get('originalWidth') as string
     const originalHeightStr = formData.get('originalHeight') as string
     
@@ -172,6 +173,7 @@ export async function POST(request: NextRequest) {
       styleIdsCount: styleIds.length,
       positionId,
       outputFormat,
+      mode,
       originalWidth: originalWidthStr,
       originalHeight: originalHeightStr,
     })
@@ -271,9 +273,10 @@ export async function POST(request: NextRequest) {
     
     // 3. プロンプト生成
     const promptStartTime = Date.now()
-    const prompt = buildPrompt(textPhraseText, styles, position)
+    const prompt = buildPrompt(textPhraseText, styles, position, mode)
     log('info', 'Prompt built', {
       promptLength: prompt.length,
+      mode,
       elapsed: Date.now() - promptStartTime,
       promptPreview: process.env.NODE_ENV === 'production' ? undefined : prompt.substring(0, 200),
     })
